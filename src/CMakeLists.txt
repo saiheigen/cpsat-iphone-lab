@@ -27,3 +27,19 @@ target_link_options(cp_sat_probe PRIVATE
   "-sEXPORTED_FUNCTIONS=['_run_cp_sat_probe','_malloc','_free']"
   "-sEXPORTED_RUNTIME_METHODS=['ccall']"
 )
+
+
+# Bounded *dynamic* assignment probe. Keeps the already-proven fixed math
+# probe unchanged. This is NOT the 589-shift production roster engine.
+add_executable(cp_sat_assignment_bridge cp_sat_assignment_bridge.cc)
+target_compile_features(cp_sat_assignment_bridge PRIVATE cxx_std_20)
+target_link_libraries(cp_sat_assignment_bridge PRIVATE ortools::ortools)
+target_compile_options(cp_sat_assignment_bridge PRIVATE -fexceptions)
+set_target_properties(cp_sat_assignment_bridge PROPERTIES SUFFIX ".js")
+target_link_options(cp_sat_assignment_bridge PRIVATE
+  -O2 -fexceptions -sMODULARIZE=1 -sEXPORT_NAME=createAssignmentModule
+  -sSINGLE_FILE=0 -sALLOW_MEMORY_GROWTH=1
+  -sENVIRONMENT=web,worker,node -sNO_EXIT_RUNTIME=1 -sASSERTIONS=1
+  "-sEXPORTED_FUNCTIONS=['_solve_assignment_v1','_malloc','_free']"
+  "-sEXPORTED_RUNTIME_METHODS=['ccall']"
+)
