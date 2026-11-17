@@ -173,7 +173,7 @@ class V7BridgeTests(unittest.TestCase):
     def test_previous_month_truncated_schedule_rejected(self):
         data = fake_backup()
         data["months"]["2026-11"] = {
-            "schedule": {"door": [[serial(2026, 11, 30), 2, "H002")],
+            "schedule": {"door": [[serial(2026, 11, 30), 2, "H002"]],
                          "officer": []}
         }
         with self.assertRaisesRegex(BridgeError, "班次數不符"):
