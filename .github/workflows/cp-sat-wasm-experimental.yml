@@ -29,6 +29,22 @@ jobs:
           mkdir -p .build
           git clone --depth 1 --branch stable https://github.com/google/or-tools.git .build/or-tools
           git -C .build/or-tools rev-parse HEAD | tee .build/ortools_commit.txt
+      - name: Fix upstream host_tools Ninja output collision
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path(".build/or-tools/cmake/host.cmake")
+          s = p.read_text()
+          old_output = "OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/host_tools\\n"
+          old_dep = "DEPENDS ${CMAKE_CURRENT_BINARY_DIR}/host_tools\\n"
+          old_build = "COMMAND ${CMAKE_COMMAND} --build build --config Release -v\\n"
+          assert s.count(old_output) == s.count(old_dep) == s.count(old_build) == 1, "Upstream host.cmake changed; stop rather than patch incorrectly"
+          s = s.replace(old_output, "OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/host_tools/.host_tools_ready\\n")
+          s = s.replace(old_dep, "DEPENDS ${CMAKE_CURRENT_BINARY_DIR}/host_tools/.host_tools_ready\\n")
+          s = s.replace(old_build, old_build + "  COMMAND ${CMAKE_COMMAND} -E touch ${CMAKE_CURRENT_BINARY_DIR}/host_tools/.host_tools_ready\\n")
+          p.write_text(s)
+          print("Patched OR-Tools host_tools custom command to use a real file instead of an existing directory")
+          PY
       - name: Configure genuine OR-Tools using Emscripten
         run: |
           emcmake cmake -S .build/or-tools -B .build/upstream -G Ninja \
