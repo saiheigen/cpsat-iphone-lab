@@ -79,6 +79,22 @@ class WasmModelAdapterTests(unittest.TestCase):
         self.assertIn("1:2", encoded["payload"])
         self.assertIn("0:2", encoded["payload"])  # same slot within two days
 
+    def test_same_sunday_dual_guard_standby_matches_v7_model(self):
+        # Two far-apart standby shifts on the same Sunday are legal,
+        # but the following Sunday's standby conflicts with both.
+        t = [Shift("door", date(2026, 12, 6), 5),
+             Shift("door", date(2026, 12, 6), 9),
+             Shift("door", date(2026, 12, 13), 5)]
+        staff = [Person("H001", "door")]
+        encoded = encode_assignment_v1(t, staff)
+        self.assertEqual(encoded["conflicts"], [(0, 2), (1, 2)])
+        self.assertEqual(encoded["payload"].splitlines()[3], "0:2;1:2")
+        audited = audit_assignment_v1_response(
+            encoded, {"status": "OPTIMAL",
+                      "assignments": [0, 0, -1],
+                      "filled": 2, "missing": 1})
+        self.assertEqual(audited["filled"], 2)
+
     def test_previous_month_history_disqualifies_person(self):
         t = [Shift("door", date(2026, 12, 1), 6)]
         staff = [Person("H001", "door"), Person("H002", "door")]
