@@ -254,6 +254,18 @@ def solve_layered(tasks: list[Shift], persons: list[Person],
         report["proved"]["hardship"] = True
         report["hardship_score"] = 0
         return report
+
+    def hardship_deviation(result):
+        categories = _hardship_categories(tasks)
+        return sum(
+            abs(sum(result[t.key] == ident for t in categories[key]) - target[ident])
+            for key, target in goals.items() for ident in target
+        )
+
+    # Keep the already-proven quota incumbent if a later search times out or
+    # produces a worse FEASIBLE hardship solution.
+    incumbent_hardship = hardship_deviation(chosen)
+    report["hardship_score"] = incumbent_hardship
     model.minimize(sum(hardness))
     hard_solver, hard_name, hard_status = run()
     stages["hardship"] = hard_name
@@ -263,12 +275,11 @@ def solve_layered(tasks: list[Shift], persons: list[Person],
             raise AssertionError("Hardship stage reduced legally filled shifts")
         if _score_deviations(hard_choice, persons, targets) != fair_score:
             raise AssertionError("Hardship stage changed proven quota score")
-        report["assignments"] = hard_choice
-        report["hardship_score"] = sum(
-            abs(sum(hard_choice[t.key] == ident for t in _hardship_categories(tasks)[key])
-                - target[ident])
-            for key, target in goals.items()
-            for ident in target
-        )
+        found_score = hardship_deviation(hard_choice)
+        if hard_status == cp_model.OPTIMAL and found_score > incumbent_hardship:
+            raise AssertionError("Proven hardship optimum is worse than feasible incumbent")
+        if found_score <= incumbent_hardship:
+            report["assignments"] = hard_choice
+            report["hardship_score"] = found_score
     report["proved"]["hardship"] = hard_status == cp_model.OPTIMAL
     return report
