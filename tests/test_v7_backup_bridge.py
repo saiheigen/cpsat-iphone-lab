@@ -7,12 +7,30 @@ from copy import deepcopy
 import unittest
 
 from solver.v7_backup_bridge import BridgeError, convert_v7_backup
-from solver.roster_cp_sat import static_reason, Shift, independently_check
+from solver.roster_cp_sat import static_reason, Shift, independently_check, month_shifts
 from solver.fairness_cp_sat import solve_layered
 
 
 def serial(y, m, d):
     return (date(y, m, d) - date(1970, 1, 1)).days
+
+
+def full_previous_schedule():
+    # Exactly the v7 November 2026 shape: 360 guard + 210 officer entries.
+    schedule = {"door": [], "officer": []}
+    for t in month_shifts(2026, 11):
+        schedule[t.pool].append([serial(t.day.year, t.day.month, t.day.day), t.num, None])
+    return schedule
+
+
+def set_previous_shift(schedule, pool, day, num, ident):
+    rows = schedule[pool]
+    target = [serial(2026, 11, day), num, None]
+    for row in rows:
+        if row[:2] == target[:2]:
+            row[2] = ident
+            return
+    raise AssertionError("Previous-month fixture task absent")
 
 
 def fake_backup():
@@ -123,11 +141,11 @@ class V7BridgeTests(unittest.TestCase):
 
     def test_existing_previous_schedule_imported_but_not_certified(self):
         data = fake_backup()
+        schedule = full_previous_schedule()
+        set_previous_shift(schedule, "door", 30, 2, "H002")
+        set_previous_shift(schedule, "officer", 30, 5, "P002")
         data["months"]["2026-11"] = {
-            "schedule": {
-                "door": [[serial(2026, 11, 30), 2, "H002"]],
-                "officer": [[serial(2026, 11, 30), 5, "P002"]]
-            },
+            "schedule": schedule,
             "inputSig": "cannot-recompute-here",
         }
         x = convert_v7_backup(data)
@@ -137,9 +155,9 @@ class V7BridgeTests(unittest.TestCase):
 
     def test_previous_history_conflict_refused(self):
         data = fake_backup()
-        data["months"]["2026-11"] = {
-            "schedule": {"door": [[serial(2026, 11, 29), 6, "H002"]], "officer": []}
-        }
+        schedule = full_previous_schedule()
+        set_previous_shift(schedule, "door", 29, 6, "H002")
+        data["months"]["2026-11"] = {"schedule": schedule}
         with self.assertRaisesRegex(BridgeError, "衝突"):
             convert_v7_backup(data)
 
@@ -150,6 +168,37 @@ class V7BridgeTests(unittest.TestCase):
             "compensationOut": {"door": {"H001": 2}, "officer": {}},
         }
         with self.assertRaisesRegex(BridgeError, "不能驗證 inputSig"):
+            convert_v7_backup(data)
+
+    def test_previous_month_truncated_schedule_rejected(self):
+        data = fake_backup()
+        data["months"]["2026-11"] = {
+            "schedule": {"door": [[serial(2026, 11, 30), 2, "H002")],
+                         "officer": []}
+        }
+        with self.assertRaisesRegex(BridgeError, "班次數不符"):
+            convert_v7_backup(data)
+
+    def test_previous_month_duplicate_shift_rejected(self):
+        data = fake_backup()
+        schedule = full_previous_schedule()
+        schedule["door"][1] = list(schedule["door"][0])
+        data["months"]["2026-11"] = {"schedule": schedule}
+        with self.assertRaisesRegex(BridgeError, "重複"):
+            convert_v7_backup(data)
+
+    def test_leap_day_shorthand_does_not_fail_on_neighbor_years(self):
+        from solver.v7_backup_bridge import _date_token
+        self.assertEqual(_date_token("2/29", date(2028, 2, 1)), date(2028, 2, 29))
+        with self.assertRaisesRegex(BridgeError, "不存在"):
+            _date_token("2/29", date(2027, 2, 1))
+
+    def test_invalid_previous_month_identity_rejected(self):
+        data = fake_backup()
+        schedule = full_previous_schedule()
+        set_previous_shift(schedule, "officer", 30, 5, "H001")
+        data["months"]["2026-11"] = {"schedule": schedule}
+        with self.assertRaisesRegex(BridgeError, "不屬於本月名冊"):
             convert_v7_backup(data)
 
     def test_invalid_pin_rejected(self):
