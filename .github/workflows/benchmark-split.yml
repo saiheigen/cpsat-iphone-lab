@@ -1,0 +1,36 @@
+# Benchmark an alternate *search strategy* on synthetic December shifts.
+# Separate pools have disjoint staff and hard constraints in this partial model.
+name: Split CP-SAT 589-shift feasibility benchmark
+on:
+  push:
+    paths:
+      - '.github/workflows/benchmark-split.yml'
+      - 'benchmarks/native_589_split.py'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  native-split:
+    strategy:
+      fail-fast: false
+      matrix:
+        pool: [door, officer]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install official OR-Tools
+        run: python -m pip install --disable-pip-version-check ortools==9.15.6755
+      - name: Solve full-occupancy feasibility for one duty pool (synthetic)
+        env:
+          BENCH_POOL: ${{ matrix.pool }}
+        run: python -m benchmarks.native_589_split
+      - name: Store scoped status and timing (including UNKNOWN)
+        uses: actions/upload-artifact@v4
+        with:
+          name: native-split-${{ matrix.pool }}-benchmark
+          path: native_split_${{ matrix.pool }}.json
+          if-no-files-found: error
