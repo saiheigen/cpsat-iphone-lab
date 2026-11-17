@@ -1,0 +1,68 @@
+# Synthetic mathematical probe only. Never upload military rosters or personnel.
+name: Experimental CP-SAT WebAssembly
+on:
+  push:
+    paths:
+      - '.github/workflows/cp-sat-wasm-experimental.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  genuine-cpsat:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - name: Checkout public synthetic probe
+        uses: actions/checkout@v4
+      - name: Install Emscripten
+        uses: mymindstorm/setup-emsdk@v14
+        with:
+          version: '4.0.12'
+      - name: Prepare prerequisites
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y cmake ninja-build git python3
+          emcc --version
+          node --version
+      - name: Clone genuine OR-Tools sources
+        run: |
+          mkdir -p .build
+          git clone --depth 1 --branch stable https://github.com/google/or-tools.git .build/or-tools
+          git -C .build/or-tools rev-parse HEAD | tee .build/ortools_commit.txt
+      - name: Configure genuine OR-Tools using Emscripten
+        run: |
+          emcmake cmake -S .build/or-tools -B .build/upstream -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release -DBUILD_DEPS=ON -DBUILD_SHARED_LIBS=OFF \
+            -DBUILD_TESTING=OFF -DBUILD_EXAMPLES=OFF -DBUILD_SAMPLES=OFF \
+            -DBUILD_PYTHON=OFF -DBUILD_JAVA=OFF -DBUILD_DOTNET=OFF \
+            -DUSE_COINOR=OFF -DUSE_GLPK=OFF -DUSE_HIGHS=OFF \
+            -DUSE_PDLP=OFF -DUSE_SCIP=OFF \
+            -DCMAKE_INSTALL_PREFIX="${{ github.workspace }}/.build/prefix"
+      - name: Compile and install OR-Tools
+        run: |
+          cmake --build .build/upstream --parallel 4
+          cmake --install .build/upstream
+      - name: Compile genuine CP-SAT test module for WASM
+        run: |
+          emcmake cmake -S src -B .build/probe -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_PREFIX_PATH="${{ github.workspace }}/.build/prefix"
+          cmake --build .build/probe --parallel 4
+      - name: Run actual CP-SAT + independent numerical oracle
+        run: |
+          mkdir -p .build/probe
+          node build/real_solver_smoke.cjs \
+            .build/probe/cp_sat_probe.js \
+            .build/probe/cp_sat_probe.wasm \
+            .build/probe/real_smoke_result.json
+      - name: Publish only proven genuine CP-SAT WASM artifacts
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: genuine-cpsat-wasm-smoke-test
+          path: |
+            .build/probe/cp_sat_probe.js
+            .build/probe/cp_sat_probe.wasm
+            .build/probe/real_smoke_result.json
+          include-hidden-files: true
+          if-no-files-found: error
