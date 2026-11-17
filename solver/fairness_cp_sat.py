@@ -69,7 +69,7 @@ def _apportion(total, keys, scores):
 
 
 def _meal_days(persons, tasks, events):
-    valid_days = {t.day for t in tasks if t.pool == "officer"}
+    valid_months = {(t.day.year, t.day.month) for t in tasks if t.pool == "officer"}
     ids = {p.id for p in persons if p.pool == "officer"}
     credits = defaultdict(set)
     for e in events:
@@ -77,7 +77,7 @@ def _meal_days(persons, tasks, events):
             continue
         d = e.start
         while d <= e.end:
-            if d in valid_days:
+            if (d.year, d.month) in valid_months:
                 credits[e.person].add(d)
             d += timedelta(days=1)
     return {p.id: len(credits[p.id]) for p in persons}
@@ -147,7 +147,7 @@ def _hardship_categories(tasks):
     groups = defaultdict(list)
     for t in tasks:
         if t.start in (22, 0, 2, 4):
-            groups[(t.pool, f"night{t.start}")] .append(t)
+            groups[(t.pool, f"night{t.start}")].append(t)
         if t.start == 12:
             groups[(t.pool, "noon")].append(t)
     return groups
