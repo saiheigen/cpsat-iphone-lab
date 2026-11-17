@@ -20,12 +20,13 @@ EXPECTED = {"engine": "Google OR-Tools CP-SAT", "status": "OPTIMAL",
 
 
 def run(browser, path, profile):
+    mobile = profile.startswith("mobile-")
     opts = {
-        "viewport": {"width": 390, "height": 844} if profile == "mobile-chromium" else
+        "viewport": {"width": 390, "height": 844} if mobile else
                     {"width": 1280, "height": 800},
-        "device_scale_factor": 3 if profile == "mobile-chromium" else 1,
-        "is_mobile": profile == "mobile-chromium",
-        "has_touch": profile == "mobile-chromium",
+        "device_scale_factor": 3 if mobile else 1,
+        "is_mobile": mobile,
+        "has_touch": mobile,
         "offline": True,
     }
     context = browser.new_context(**opts)
@@ -37,7 +38,7 @@ def run(browser, path, profile):
             if request.url.startswith(("http://", "https://")) else None)
     page.on("pageerror", lambda exc: errors.append(str(exc)))
     started = time.monotonic()
-    result = {"profile": profile, "browser": "actual-Chromium",
+    result = {"profile": profile, "browser": browser.browser_type.name,
               "real_iphone_safari": False, "offline": True}
     try:
         page.goto(path.resolve().as_uri(), wait_until="domcontentloaded", timeout=90000)
@@ -99,17 +100,22 @@ def main():
         raise SystemExit("Genuine, bundled HTML file missing or too small")
 
     with sync_playwright() as p:
-        browser = p.chromium.launch(headless=True, args=["--no-sandbox"])
+        chromium = p.chromium.launch(headless=True, args=["--no-sandbox"])
         try:
             tests = [
-                run(browser, args.html, "desktop"),
-                run(browser, args.html, "mobile-chromium"),
+                run(chromium, args.html, "desktop-chromium"),
+                run(chromium, args.html, "mobile-chromium"),
             ]
         finally:
-            browser.close()
+            chromium.close()
+        webkit = p.webkit.launch(headless=True)
+        try:
+            tests.append(run(webkit, args.html, "mobile-webkit"))
+        finally:
+            webkit.close()
     report = {
         "accepted": all(t["accepted"] for t in tests),
-        "test_type": "actual-offline-Chromium-not-Safari",
+        "test_type": "actual-offline-Chromium-and-Linux-WebKit-not-iOS-Safari",
         "source": "previously-Node-verified-genuine-OR-Tools-WASM-artifact",
         "does_not_prove": [
             "iPhone real Safari", "589-shift WASM solver",
