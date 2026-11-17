@@ -1,6 +1,6 @@
 """Differential synthetic audit: exact brute-force fill oracle vs genuine CP-SAT.
 
-Run with AUDIT_SEED=0,1,2 as separate CI jobs. No real rosters. Brute-force
+Run with AUDIT_SEED=0..5 in six separate CI jobs. No real rosters. Brute-force
 enumeration is separate from CP-SAT encoding, but shares the declared hard
 rule functions (static_reason and conflicts) with the independent auditor:
 NOT independent verification of *all* real-world regulations.
@@ -15,6 +15,7 @@ from solver.roster_cp_sat import (
     Event, History, Person, Shift, independently_check, month_shifts, solve,
     static_reason,
 )
+from solver.split_fill_cp_sat import solve_split_fill_first
 
 
 class DifferentialFillTests(unittest.TestCase):
@@ -82,6 +83,17 @@ class DifferentialFillTests(unittest.TestCase):
                              f"group {group}, case {case}")
             self.assertTrue(independently_check(tasks, people, cp["assignments"],
                                                events, history, pins))
+            # Exact search oracle must also agree with the new split-pool
+            # full-first strategy, including forced blanks and absences.
+            split = solve_split_fill_first(
+                tasks, people, events, history, pins,
+                seconds_full=2, seconds_fallback=3)
+            self.assertEqual(split["filled"], exact_max,
+                             f"split group {group}, case {case}")
+            self.assertTrue(split["optimal_fill_proven"])
+            self.assertTrue(independently_check(
+                tasks, people, split["assignments"],
+                events, history, pins))
             tested += 1
         print(f"PASS: exact reference vs real CP-SAT, seed_group={group}, cases={tested}")
 
