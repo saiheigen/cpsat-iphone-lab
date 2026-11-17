@@ -34,7 +34,7 @@
 - 安官：**217/217 班**，原生 CP-SAT 真正回傳 `OPTIMAL`，約 11.472 秒。
 - 大門：**372/372 班**，CP-SAT 滿班可行性仍為 `UNKNOWN`；完整合法方案來自**獨立構造並審核通過的初稿**，不是 CP-SAT 求解器已證明 OPTIMAL，約 21.047 秒。
 - 結果的整月「最大填班數」可透過已實際填滿所有班次及每班最多一人的上界證明；**公平、補償、真實軍務規則並未取得最優證明**。
-- 下一次回歸已加入 `solution_source` 顯示，讓報告不只說 589/589，也指出各池實際採用哪一種來源。
+- **第三次重跑（已驗收來源欄位）：** https://github.com/saiheigen/cpsat-iphone-lab/actions/runs/44130341809：總計 589/589，耗時約 30.513 秒。大門 372/372，CP-SAT 回傳 `UNKNOWN`，`solution_source=independent_constructive_witness`；安官 217/217，CP-SAT 回傳 `OPTIMAL`，`solution_source=cp_sat`。兩池來源清楚分列，不能混稱整月 CP-SAT OPTIMAL。
 
 ## 其他測試與銜接
 
