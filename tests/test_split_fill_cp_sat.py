@@ -4,6 +4,8 @@ All examples use invented IDs, limited dates, and the *partial* rules model.
 """
 from datetime import date
 import unittest
+from unittest.mock import patch
+from ortools.sat.python import cp_model
 
 from solver.roster_cp_sat import (
     Event, History, Person, Shift, independently_check, solve,
@@ -111,6 +113,35 @@ class SplitSolverTests(unittest.TestCase):
         self.assertEqual(out["filled"], 0)
         self.assertEqual(out["assignments"], {})
         self.assertFalse(out["operationally_certified"])
+
+    def test_independent_full_witness_after_cp_sat_unknown_is_truthful(self):
+        staff = [Person("H001", "door")]
+        task = Shift("door", d(1), 6)
+        with patch("solver.split_fill_cp_sat._solve_model",
+                   return_value=(None, cp_model.UNKNOWN, "UNKNOWN")):
+            out = solve_split_fill_first([task], staff,
+                                         seconds_full=1, seconds_fallback=1)
+        self.assertEqual(out["status"], "FULL")
+        self.assertTrue(out["optimal_fill_proven"])
+        self.assertEqual(out["pools"]["door"]["full_feasibility"], "UNKNOWN")
+        self.assertEqual(out["pools"]["door"]["solution_source"],
+                         "independent_constructive_witness")
+        self.assertEqual(out["pools"]["door"]["fallback"], "NOT_RUN")
+
+    def test_partial_constructive_seed_after_two_timeouts_not_mislabeled_optimal(self):
+        staff = [Person("H001", "door")]
+        tasks = [Shift("door", d(1), 6), Shift("door", d(2), 6)]
+        with patch("solver.split_fill_cp_sat._solve_model",
+                   return_value=(None, cp_model.UNKNOWN, "UNKNOWN")):
+            out = solve_split_fill_first(tasks, staff,
+                                         seconds_full=1, seconds_fallback=1)
+        self.assertEqual(out["status"], "PARTIAL_FEASIBLE")
+        self.assertEqual((out["filled"], out["missing"]), (1, 1))
+        self.assertFalse(out["optimal_fill_proven"])
+        self.assertEqual(out["pools"]["door"]["solution_source"],
+                         "independent_constructive_witness")
+        self.assertEqual(out["pools"]["door"]["fallback"], "UNKNOWN")
+        self.assertTrue(independently_check(tasks, staff, out["assignments"]))
 
     def test_invalid_time_budget_rejected(self):
         for bad in (0, -1, float("nan"), float("inf"), True):
