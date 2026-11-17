@@ -1,0 +1,57 @@
+# Genuine dynamic OR-Tools CP-SAT must prove 4 anonymous scenarios in a
+# network-disabled Chromium browser before we call its offline page tested.
+# No real personnel, rosters or unit duty data. NOT real Safari/iPhone.
+name: Dynamic offline CP-SAT WASM browser acceptance
+on:
+  workflow_run:
+    workflows: ["Package verified dynamic CP-SAT WASM offline demo"]
+    types: [completed]
+  workflow_dispatch:
+    inputs:
+      source_run_id:
+        description: "Successful dynamic offline HTML packaging run ID"
+        type: string
+        required: true
+permissions:
+  actions: read
+  contents: read
+jobs:
+  dynamic-browser:
+    if: >-
+      (github.event_name == 'workflow_run' &&
+       github.event.workflow_run.conclusion == 'success' &&
+       github.event.workflow_run.head_repository.full_name == github.repository) ||
+      github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-24.04
+    container:
+      image: mcr.microsoft.com/playwright/python:v1.58.0-noble
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Fetch the proof-gated genuinely dynamic offline page
+        uses: actions/download-artifact@v4
+        with:
+          name: genuine-dynamic-cpsat-offline-demo
+          run-id: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.id || inputs.source_run_id }}
+          repository: ${{ github.repository }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          path: received
+      - name: Install matching Playwright Python client
+        run: python -m pip install --disable-pip-version-check playwright==1.58.0
+      - name: Execute 4 synthetic CP-SAT cases in actual offline browsers
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(find received -type f -name dynamic_cp_sat_offline_demo.html | wc -l)" -eq 1
+          page="$(find received -type f -name dynamic_cp_sat_offline_demo.html)"
+          test -s "$page"
+          python tests/browser_dynamic_assignment.py "$page"
+      - name: Save exact accept/reject evidence and failure screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: real-dynamic-cpsat-browser-proof
+          path: |
+            dynamic_browser_proof.json
+            dynamic-*-failure.png
+          if-no-files-found: warn
