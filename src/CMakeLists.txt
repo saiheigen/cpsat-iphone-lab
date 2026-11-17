@@ -3,7 +3,18 @@ project(cp_sat_iphone_probe LANGUAGES CXX)
 if(NOT EMSCRIPTEN)
   message(FATAL_ERROR "Requires Emscripten via emcmake")
 endif()
-find_package(ortools CONFIG REQUIRED)
+# Optional source-tree mode builds only cp_sat_probe and its transitive
+# dependencies. The normal "all" target also builds CLI apps (sat_runner,
+# solve) that depend on Unix signals and fail with Emscripten.
+# The original find_package() workflow is retained for already installed builds.
+if(DEFINED ORTOOLS_SOURCE_DIR AND NOT ORTOOLS_SOURCE_DIR STREQUAL "")
+  if(NOT EXISTS "${ORTOOLS_SOURCE_DIR}/CMakeLists.txt")
+    message(FATAL_ERROR "ORTOOLS_SOURCE_DIR must point at OR-Tools source tree")
+  endif()
+  add_subdirectory("${ORTOOLS_SOURCE_DIR}" "${CMAKE_CURRENT_BINARY_DIR}/ortools-build" EXCLUDE_FROM_ALL)
+else()
+  find_package(ortools CONFIG REQUIRED)
+endif()
 add_executable(cp_sat_probe cp_sat_probe.cc)
 target_compile_features(cp_sat_probe PRIVATE cxx_std_20)
 target_link_libraries(cp_sat_probe PRIVATE ortools::ortools)
