@@ -1,0 +1,48 @@
+# Only package an artifact after the genuine OR-Tools CP-SAT workflow succeeds.
+# Synthetic mathematics only. Never upload military rostering data.
+name: Package verified offline iPhone CP-SAT probe
+on:
+  workflow_run:
+    workflows: ["Experimental CP-SAT WebAssembly"]
+    types: [completed]
+permissions:
+  contents: read
+  actions: read
+jobs:
+  pack-verified:
+    if: >-
+      ${{ github.event.workflow_run.conclusion == 'success' &&
+          github.event.workflow_run.event == 'push' &&
+          github.event.workflow_run.head_repository.full_name == github.repository }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout verified packager from main
+        uses: actions/checkout@v4
+      - name: Download verified genuine WASM artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: genuine-cpsat-wasm-smoke-test
+          run-id: ${{ github.event.workflow_run.id }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          path: upstream
+      - name: Require genuine solver to pass again and package standalone iPhone HTML
+        shell: bash
+        run: |
+          set -euo pipefail
+          find upstream -maxdepth 8 -type f | sort
+          js=$(find upstream -name cp_sat_probe.js -type f -print -quit)
+          wasm=$(find upstream -name cp_sat_probe.wasm -type f -print -quit)
+          proof=$(find upstream -name real_smoke_result.json -type f -print -quit)
+          test -n "$js" && test -n "$wasm" && test -n "$proof"
+          node build/real_solver_smoke.cjs "$js" "$wasm" rerun_smoke_result.json
+          python3 build/iphone_bundle.py "$js" "$wasm" "$proof" "iPhone_CP-SAT_真正求解驗收.html"
+          test -s "iPhone_CP-SAT_真正求解驗收.html"
+      - name: Upload genuine offline iPhone CP-SAT acceptance page
+        uses: actions/upload-artifact@v4
+        with:
+          name: iphone-cp-sat-genuine-offline-probe
+          path: |
+            iPhone_CP-SAT_真正求解驗收.html
+            rerun_smoke_result.json
+          if-no-files-found: error
