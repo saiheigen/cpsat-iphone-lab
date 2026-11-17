@@ -217,6 +217,12 @@ def convert_v7_backup(data: dict, month: str | None = None) -> BridgeResult:
             ident = fields[0].strip()
             rank = fields[1].strip()
             full_name = fields[2].strip() if len(fields) >= 3 else rank
+            # Exactly mirror v7 normalizeRosterFields(): a 3-column row
+            # "ID,姓名,性別" must not silently become name="男/女".
+            if (len(fields) == 3 and rank not in _RANKS
+                    and full_name.lower() in {s.lower() for s in _SEX}):
+                full_name = rank
+                rank = ""
             if not ident or not full_name or ident in ids:
                 raise BridgeError(f"{pool} 第 {no} 行：缺少姓名或編號重複")
             if not re.fullmatch(r"[A-Za-z]\w{0,40}", ident):
