@@ -1,0 +1,67 @@
+# Only proven real dynamic WASM gets a single-file offline HTML.
+# Not a production roster, not an iPhone/Safari hardware certification.
+name: Package verified dynamic CP-SAT WASM offline demo
+on:
+  workflow_run:
+    workflows: ["Dynamic assignment CP-SAT WebAssembly build"]
+    types: [completed]
+  workflow_dispatch:
+    inputs:
+      source_run_id:
+        description: "Successful dynamic CP-SAT WASM workflow run ID"
+        required: true
+        type: string
+permissions:
+  actions: read
+  contents: read
+jobs:
+  dynamic-package:
+    if: >-
+      (github.event_name == 'workflow_run' &&
+       github.event.workflow_run.conclusion == 'success' &&
+       github.event.workflow_run.head_repository.full_name == github.repository) ||
+      github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: Download previously Node-verified dynamic CP-SAT artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: genuine-dynamic-cpsat-wasm-experimental
+          run-id: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.id || inputs.source_run_id }}
+          repository: ${{ github.repository }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          path: received
+      - name: Recheck provenance and independently rerun genuine dynamic CP-SAT
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(find received -type f -name cp_sat_assignment_bridge.js | wc -l)" -eq 1
+          test "$(find received -type f -name cp_sat_assignment_bridge.wasm | wc -l)" -eq 1
+          test "$(find received -type f -name dynamic_wasm_proof.json | wc -l)" -eq 1
+          js="$(find received -type f -name cp_sat_assignment_bridge.js)"
+          wasm="$(find received -type f -name cp_sat_assignment_bridge.wasm)"
+          proof="$(find received -type f -name dynamic_wasm_proof.json)"
+          test -s "$js" && test -s "$wasm" && test -s "$proof"
+          echo "CP_SAT_DYNAMIC_JS=$js" >> "$GITHUB_ENV"
+          echo "CP_SAT_DYNAMIC_WASM=$wasm" >> "$GITHUB_ENV"
+          mkdir -p verified dist
+          node tests/dynamic_assignment_wasm.cjs \
+            "$js" "$wasm" verified/real_dynamic_proof.json
+      - name: Package standalone offline HTML only after SHA and oracle checks
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 build/package_dynamic_assignment.py \
+            "$CP_SAT_DYNAMIC_JS" "$CP_SAT_DYNAMIC_WASM" \
+            verified/real_dynamic_proof.json dist/dynamic_cp_sat_offline_demo.html
+          test -s dist/dynamic_cp_sat_offline_demo.html
+      - name: Upload verified, completely fictional offline browser demo
+        uses: actions/upload-artifact@v4
+        with:
+          name: genuine-dynamic-cpsat-offline-demo
+          path: |
+            dist/dynamic_cp_sat_offline_demo.html
+            verified/real_dynamic_proof.json
+          if-no-files-found: error
