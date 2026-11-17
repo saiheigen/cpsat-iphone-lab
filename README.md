@@ -25,3 +25,13 @@
 - `.github/workflows/cp-sat-wasm-experimental.yml`：自動建置與測試
 
 不含任何真實排班資料；尚未與 v7.0 主程式整合。
+
+## 自動產生 iPhone 單檔驗收頁
+
+最新已新增 `.github/workflows/iphone-html-after-cpsat.yml`：當前一個真正 CP-SAT 編譯工作**成功**，並上傳經驗證的 JS/WASM 後，會自動下載該產物，再次執行 CP-SAT 真實求解及獨立枚舉驗證，檢查 WASM 無共享記憶體，才輸出：
+
+`iPhone_CP-SAT_真正求解驗收.html`
+
+[查看自動封裝執行紀錄](https://github.com/saiheigen/cpsat-iphone-lab/actions/workflows/iphone-html-after-cpsat.yml)
+
+> 編譯失敗時不會產生手機驗收頁。就算產生，也仍需 iPhone HTML Viewer 實際測試，且暫時只處理虛構的二變數小題，不是 589 班整月模型。
