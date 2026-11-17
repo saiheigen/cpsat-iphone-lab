@@ -192,6 +192,27 @@ class BoundaryOptimizationTests(unittest.TestCase):
         result = solve(shifts, people, seconds=5)
         self.assertEqual(result["filled"], 1)
 
+    def test_two_legal_guard_shifts_same_sunday_are_allowed(self):
+        # v7 conflict() bars consecutive SUNDAYS, not 2 widely spaced
+        # Sunday standby shifts on the SAME calendar Sunday.
+        people = [Person("H001", "door")]
+        shifts = [Shift("door", D(6), 5), Shift("door", D(6), 9)]
+        self.assertFalse(conflicts(shifts[0], shifts[1]))
+        result = solve(shifts, people, seconds=5)
+        self.assertEqual(result["status"], "OPTIMAL")
+        self.assertEqual(result["filled"], 2)
+        self.assertTrue(independently_check(shifts, people, result["assignments"]))
+
+    def test_same_sunday_dual_standby_still_blocks_next_sunday(self):
+        staff = [Person("H001", "door")]
+        shifts = [Shift("door", D(6), 5),
+                  Shift("door", D(6), 9),
+                  Shift("door", D(13), 5)]
+        result = solve(shifts, staff, seconds=5)
+        self.assertEqual(result["status"], "OPTIMAL")
+        self.assertEqual(result["filled"], 2)
+        self.assertTrue(independently_check(shifts, staff, result["assignments"]))
+
     def test_prev_month_two_day_same_slot_block(self):
         people = [Person("H001", "door")]
         shifts = [Shift("door", D(2), 6), Shift("door", D(3), 6)]
