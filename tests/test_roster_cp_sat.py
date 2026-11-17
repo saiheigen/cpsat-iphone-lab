@@ -201,5 +201,26 @@ class BoundaryOptimizationTests(unittest.TestCase):
         self.assertEqual(result["filled"], 1)
 
 
+class Synthetic589WitnessTests(unittest.TestCase):
+    def test_589_shift_witness_without_real_world_absences(self):
+        # A constructive feasibility witness, not a CP-SAT solve.
+        # Uses synthetic people only. This does not prove feasibility under
+        # leave, training, drivers, human availability, or month-end history.
+        people = ([Person(f"H{i:03}", "door") for i in range(1, 57)] +
+                  [Person(f"P{i:03}", "officer") for i in range(1, 51)])
+        tasks = month_shifts(2026, 12)
+        assigned = {}
+        for t in tasks:
+            cycle = (t.day.day - 1) // 2
+            parity = (t.day.day - 1) % 2
+            group_size = 28 if t.pool == "door" else 25
+            ix = parity * group_size + ((t.num - 1 + cycle) % group_size) + 1
+            prefix = "H" if t.pool == "door" else "P"
+            assigned[t.key] = f"{prefix}{ix:03}"
+        self.assertTrue(independently_check(tasks, people, assigned))
+        self.assertEqual(len(assigned), 589)
+        self.assertEqual(len([k for k, v in assigned.items() if v]), 589)
+
+
 if __name__ == "__main__":
     unittest.main()
