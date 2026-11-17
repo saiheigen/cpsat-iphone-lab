@@ -14,6 +14,8 @@ jobs:
     timeout-minutes: 25
     steps:
       - uses: actions/checkout@v4
+      - name: Test iPhone packager rejection gates
+        run: python3 -m unittest discover -s tests -p 'test_package_iphone.py' -v
       - name: Setup Emscripten
         uses: emscripten-core/setup-emsdk@v15
         with:
