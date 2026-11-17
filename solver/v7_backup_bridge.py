@@ -366,11 +366,24 @@ def convert_v7_backup(data: dict, month: str | None = None) -> BridgeResult:
     if not isinstance(raw_pins, dict):
         raise BridgeError("人工固定班次欄位不是物件")
     for k, who in raw_pins.items():
-        if not isinstance(k, str) or k not in task_keys:
+        # v7 uses Unix *day serial* keys, while our native Shift.key uses ISO
+        # dates. Never compare the two formats without an explicit conversion.
+        match = re.fullmatch(r"(door|officer):(-?\d+):(\d+)", k) if isinstance(k, str) else None
+        if not match:
+            raise BridgeError("人工固定班次編號格式不符合 v7 日期序號")
+        pool, day_serial, shift_num = match.groups()
+        day = _day_from_serial(int(day_serial))
+        try:
+            canonical = Shift(pool, day, int(shift_num)).key
+        except ValueError:
+            raise BridgeError("人工固定班號無效") from None
+        if canonical not in task_keys:
             raise BridgeError("人工固定班次編號不在本月班表")
-        if who is not None and (who not in ids or ids[who].pool != k.split(":")[0]):
+        if who is not None and (who not in ids or ids[who].pool != pool):
             raise BridgeError("人工固定人員不存在或勤務種類不一致")
-        pins[k] = who
+        if canonical in pins:
+            raise BridgeError("人工固定班次重複")
+        pins[canonical] = who
 
     unverified_auto = previous.get("compensationOut")
     if previous.get("locked") and unverified_auto:
