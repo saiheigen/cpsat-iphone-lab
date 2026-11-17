@@ -38,10 +38,22 @@ def run(browser, path, profile):
             if request.url.startswith(("http://", "https://")) else None)
     page.on("pageerror", lambda exc: errors.append(str(exc)))
     started = time.monotonic()
+    inline_webkit = profile == "mobile-webkit-inline"
     result = {"profile": profile, "browser": browser.browser_type.name,
-              "real_iphone_safari": False, "offline": True}
+              "real_iphone_safari": False, "offline": True,
+              "loading_mode": "inline-document" if inline_webkit else "local-file-url",
+              "file_url_loading_proven": not inline_webkit}
     try:
-        page.goto(path.resolve().as_uri(), wait_until="domcontentloaded", timeout=90000)
+        if inline_webkit:
+            # Playwright Linux WebKit has a known file:/// internal navigation
+            # failure in this runner. Validate actual inline JS + WebAssembly
+            # separately instead of silently claiming file:// works.
+            page.goto("about:blank", wait_until="domcontentloaded")
+            page.set_content(path.read_text(encoding="utf-8"),
+                             wait_until="domcontentloaded", timeout=90000)
+        else:
+            page.goto(path.resolve().as_uri(),
+                      wait_until="domcontentloaded", timeout=90000)
         page.locator("#run").click(timeout=20000)
         page.wait_for_function(
             """() => {
@@ -110,16 +122,19 @@ def main():
             chromium.close()
         webkit = p.webkit.launch(headless=True)
         try:
-            tests.append(run(webkit, args.html, "mobile-webkit"))
+            tests.append(run(webkit, args.html, "mobile-webkit-inline"))
         finally:
             webkit.close()
     report = {
         "accepted": all(t["accepted"] for t in tests),
+        "webkit_local_file_url": "NOT_VERIFIED_LINUX_WEBKIT_NAVIGATION_FAILURE",
+        "webkit_inline_execution": "ACTUALLY_TESTED",
         "test_type": "actual-offline-Chromium-and-Linux-WebKit-not-iOS-Safari",
         "source": "previously-Node-verified-genuine-OR-Tools-WASM-artifact",
         "does_not_prove": [
             "iPhone real Safari", "589-shift WASM solver",
             "native roster integration", "operational schedule rules",
+            "WebKit local file URL opening",
         ],
         "tests": tests,
     }
@@ -128,7 +143,7 @@ def main():
         encoding="utf-8")
     print(json.dumps(report, indent=2, ensure_ascii=False))
     if not report["accepted"]:
-        raise SystemExit("At least one offline Chromium CP-SAT check FAILED")
+        raise SystemExit("At least one explicitly scoped offline browser CP-SAT check FAILED")
 
 
 if __name__ == "__main__":
