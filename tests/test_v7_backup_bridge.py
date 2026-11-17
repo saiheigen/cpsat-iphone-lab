@@ -93,6 +93,17 @@ class V7BridgeTests(unittest.TestCase):
         self.assertTrue(static_reason(meal, Shift("officer", date(2026, 12, 10), 5), x.events))
         self.assertTrue(static_reason(meal, Shift("officer", date(2026, 12, 11), 5), x.events))
 
+    def test_three_column_name_without_rank_is_preserved(self):
+        data = fake_backup()
+        data["global"]["door"] = "H001,模擬甲,男\nH002,上兵,模擬乙,男"
+        data["global"]["officer"] = "P001,模擬丙,女\nP002,上士,模擬丁,女"
+        converted = convert_v7_backup(data)
+        self.assertEqual(len(converted.people), 4)
+        self.assertTrue(any(e.person == "H001" and e.type == "leave"
+                            for e in converted.events))
+        self.assertTrue(any(e.person == "P001" and e.type == "meal"
+                            for e in converted.events))
+
     def test_duplicates_are_rejected_before_solve(self):
         data = fake_backup()
         data["global"]["officer"] += "\nH001,中士,虛構重複,男"
