@@ -57,7 +57,7 @@ class V7BridgeTests(unittest.TestCase):
         self.assertEqual(x.carry, {"H002": 1})
         self.assertEqual(len(x.history), 1)
         self.assertEqual(x.history[0].shift.day, date(2026, 11, 29))
-        self.assertEqual(x.pins, {f"door:{serial(2026, 12, 7)}:6": "H001"})
+        self.assertEqual(x.pins, {"door:2026-12-07:6": "H001"})
         self.assertEqual(len(x.events), 3)
         self.assertFalse(x.operationally_certified)
         self.assertFalse(x.cross_month_confirmed)
