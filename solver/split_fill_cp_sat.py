@@ -13,6 +13,7 @@ import math
 import time
 from ortools.sat.python import cp_model
 from solver.roster_cp_sat import prepare, independently_check
+from solver.constructive_witness import construct_legal_seed
 
 POOLS = ("door", "officer")
 
@@ -86,6 +87,9 @@ def solve_split_fill_first(tasks, persons, events=None, history=None,
             continue
 
         full_model, full_vars = prepare(tt, pp, ee, hh, pi)
+        seed = construct_legal_seed(tt, pp, ee, hh, pi, attempts=12)
+        for (task, ident), var in full_vars.items():
+            full_model.add_hint(var, 1 if seed["assignments"][task] == ident else 0)
         full_model.add(sum(full_vars.values()) == len(tt))
         first, st, first_name = _solve_model(full_model, seconds_full)
         if st in (cp_model.OPTIMAL, cp_model.FEASIBLE):
@@ -96,7 +100,24 @@ def solve_split_fill_first(tasks, persons, events=None, history=None,
                 "status": "FULL", "full_feasibility": first_name,
                 "fallback": "NOT_RUN", "tasks": len(tt), "filled": len(tt),
                 "missing": 0, "assignments": answer,
+                "solution_source": "cp_sat",
                 "optimal_fill_proven": True,
+                "seconds": round(time.monotonic() - started, 3)}
+            combined.update(answer)
+            continue
+
+        if seed["full_upper_bound_reached"]:
+            if st != cp_model.UNKNOWN:
+                raise AssertionError("CP-SAT rejected independently audited full witness")
+            # Explicitly show the solver timed out. Full legal witness, however,
+            # independently proves maximal fill under the current partial rules.
+            answer = seed["assignments"]
+            diagnostics[pool] = {
+                "status": "FULL", "full_feasibility": first_name,
+                "fallback": "NOT_RUN",
+                "solution_source": "independent_constructive_witness",
+                "tasks": len(tt), "filled": len(tt), "missing": 0,
+                "assignments": answer, "optimal_fill_proven": True,
                 "seconds": round(time.monotonic() - started, 3)}
             combined.update(answer)
             continue
@@ -105,20 +126,32 @@ def solve_split_fill_first(tasks, persons, events=None, history=None,
         # entirely and optimize maximal legal coverage without weakening any
         # eligibility, history, rest, or pin constraints.
         fallback_model, fallback_vars = prepare(tt, pp, ee, hh, pi)
+        for (task, ident), var in fallback_vars.items():
+            fallback_model.add_hint(
+                var, 1 if seed["assignments"][task] == ident else 0)
         second, st2, second_name = _solve_model(fallback_model, seconds_fallback)
-        answer, filled = None, None
+        answer, filled, source = None, None, None
         if st2 in (cp_model.OPTIMAL, cp_model.FEASIBLE):
             answer = _result(tt, pp, fallback_vars, second, ee, hh, pi)
             filled = sum(x is not None for x in answer.values())
+            source = "cp_sat"
             if st == cp_model.INFEASIBLE and filled == len(tt):
                 raise AssertionError("Proven full infeasibility contradicts full solution")
+        if st2 in (cp_model.INFEASIBLE, cp_model.MODEL_INVALID):
+            raise AssertionError("Max-fill solver rejected a verified legal seed")
+        if filled is None or seed["filled"] > filled:
+            if st2 == cp_model.OPTIMAL:
+                raise AssertionError("Proven optimum worse than independently verified seed")
+            answer, filled, source = (seed["assignments"], seed["filled"],
+                                      "independent_constructive_witness")
+        if answer is not None:
             combined.update(answer)
         diagnostics[pool] = {
             "status": "PARTIAL" if answer is not None else "NO_FEASIBLE_RESULT",
             "full_feasibility": first_name, "fallback": second_name,
             "tasks": len(tt), "filled": filled,
             "missing": len(tt) - filled if filled is not None else None,
-            "assignments": answer,
+            "assignments": answer, "solution_source": source,
             "optimal_fill_proven": st2 == cp_model.OPTIMAL,
             "seconds": round(time.monotonic() - started, 3)}
 
