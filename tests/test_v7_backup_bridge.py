@@ -161,7 +161,7 @@ class V7BridgeTests(unittest.TestCase):
     def test_kitchen_and_half_width_delimiters(self):
         data = fake_backup()
         data["global"]["kitchen"] = "H002"
-        data["global"]["nightcheck"] = "H001；115/12/12"
+        data["global"]["nightcheck"] = "H001，115/12/12"
         x = convert_v7_backup(data)
         self.assertTrue(next(p for p in x.people if p.id == "H002").kitchen)
         self.assertTrue(static_reason(next(p for p in x.people if p.id == "H001"),
