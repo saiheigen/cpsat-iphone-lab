@@ -90,7 +90,16 @@ def _date_token(raw: Any, target: date) -> date:
         return _month_date(y, m, d)
     if len(vals) == 2:
         m, d = map(int, vals)
-        opts = [_month_date(y, m, d) for y in (target.year - 1, target.year, target.year + 1)]
+        # A valid leap day in the target year must not be rejected simply
+        # because the preceding or following year lacks February 29.
+        opts = []
+        for yy in (target.year - 1, target.year, target.year + 1):
+            try:
+                opts.append(date(yy, m, d))
+            except ValueError:
+                continue
+        if not opts:
+            raise BridgeError(f"不存在的日期：{s}")
         return min(opts, key=lambda candidate: abs((candidate - target).days))
     raise BridgeError(f"日期欄位不足：{s}")
 
@@ -335,10 +344,34 @@ def convert_v7_backup(data: dict, month: str | None = None) -> BridgeResult:
         sch = previous["schedule"]
         if not isinstance(sch, dict):
             raise BridgeError("前月已存班表格式不正確")
+        # v7 validateBackupMonthShapes() requires a complete month grid. A
+        # truncated grid cannot be presented as valid cross-month history.
+        py, pm = prior.year, prior.month
+        expected_days = calendar.monthrange(py, pm)[1]
+        expected_slots = {"door": 12, "officer": 7}
+        for pool, slots_per_day in expected_slots.items():
+            values = sch.get(pool)
+            if not isinstance(values, list) or len(values) != expected_days * slots_per_day:
+                raise BridgeError("前月已存班表班次數不符，禁止用不完整歷史判斷")
+            seen = set()
+            for entry in values:
+                if not isinstance(entry, list) or len(entry) != 3:
+                    raise BridgeError("前月班次必須為 [日序號, 班號, 編號]")
+                serial, num, ident = entry
+                when = _day_from_serial(serial)
+                if (when.year, when.month) != (py, pm):
+                    raise BridgeError("前月班表包含其他月份")
+                if type(num) is not int or not 1 <= num <= slots_per_day:
+                    raise BridgeError("前月班號無效")
+                key = (serial, num)
+                if key in seen:
+                    raise BridgeError("前月班次日期與時段重複")
+                seen.add(key)
+                if ident is not None and (not isinstance(ident, str) or
+                                          ident not in ids or ids[ident].pool != pool):
+                    raise BridgeError("前月班次人員不屬於本月名冊")
         for pool in ("door", "officer"):
-            values = sch.get(pool, [])
-            if not isinstance(values, list):
-                raise BridgeError("前月班次不是陣列")
+            values = sch[pool]
             for entry in values:
                 if not isinstance(entry, list) or len(entry) != 3:
                     raise BridgeError("前月班次必須為 [日序號, 班號, 編號]")
