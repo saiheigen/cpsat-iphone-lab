@@ -254,13 +254,16 @@ def prepare(tasks: list[Shift], persons: list[Person],
                     other = by_day_num.get((d + offset * DAY, t.num))
                     if other is not None:
                         model.add(v + other <= 1)
-            # Consecutive Sundays' standby; the exact eligible time windows
-            # are defined by Shift.sunday_standby (based on existing v7 slots).
+            # v7 disallows standby on consecutive SUNDAYS but permits
+            # multiple same-Sunday guard shifts if rest/daily limits allow.
+            # Never sum both Sundays <=1: that accidentally forbids two
+            # otherwise legal standby shifts within a single Sunday.
             standby = [v for t, v in entries if t.sunday_standby]
             next_sunday = [v for t, v in by_day.get(d + 7 * DAY, [])
                            if t.sunday_standby]
-            if standby and next_sunday:
-                model.add(sum(standby + next_sunday) <= 1)
+            for left in standby:
+                for right in next_sunday:
+                    model.add(left + right <= 1)
 
     model.maximize(sum(assignments.values()))
     return model, assignments
