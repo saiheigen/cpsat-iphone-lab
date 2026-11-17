@@ -69,6 +69,8 @@ jobs:
         run: python -m unittest discover -s tests -p 'test_v7_preview.py' -v
       - name: Verify bounded anonymous Python-to-WASM bridge contract
         run: python -m unittest discover -s tests -p 'test_wasm_assignment_adapter.py' -v
+      - name: Verify dynamic offline WASM packaging proof gate (fake fixture only)
+        run: python -m unittest discover -s tests -p 'test_package_dynamic_assignment.py' -v
       - name: Run real native CP-SAT OPTIMAL test (NOT WASM)
         run: python tests/native_cpsat.py | tee native_cpsat_result.json
       - name: Upload native CP-SAT evidence
