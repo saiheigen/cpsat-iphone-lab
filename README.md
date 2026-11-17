@@ -35,3 +35,14 @@
 [查看自動封裝執行紀錄](https://github.com/saiheigen/cpsat-iphone-lab/actions/workflows/iphone-html-after-cpsat.yml)
 
 > 編譯失敗時不會產生手機驗收頁。就算產生，也仍需 iPhone HTML Viewer 實際測試，且暫時只處理虛構的二變數小題，不是 589 班整月模型。
+
+
+## 基礎診斷工作流程（2026-11-17 新增）
+
+另外提供 [iPhone WASM baseline and native CP-SAT](https://github.com/saiheigen/cpsat-iphone-lab/actions/workflows/verify.yml) 工作流程：
+
+- `wasm-baseline`：產生 `iphone_smoke.html`，測試 Emscripten 產生的**真正** WASM 能否在 iPhone HTML Viewer 以單檔啟動。**只測算術函數，不是 CP-SAT**。
+- `native-cpsat`：在 GitHub Linux 主機跑官方 OR-Tools CP-SAT，確認求解與 OPTIMAL。**不是 WASM / iPhone 驗收**。
+- [真正 CP-SAT WASM 實驗工作流程](https://github.com/saiheigen/cpsat-iphone-lab/actions/workflows/cp-sat-wasm-experimental.yml) 仍然獨立存在；需要其 Node 真實 WASM 求解成功，才可宣稱 CP-SAT WASM smoke test 通過。
+
+目前尚未取得任一 GitHub Action 的實際綠燈驗證，不應以程式提交取代成功證據。
