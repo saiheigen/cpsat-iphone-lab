@@ -16,6 +16,44 @@ from solver.roster_cp_sat import (
     static_reason,
 )
 from solver.split_fill_cp_sat import solve_split_fill_first
+from solver.wasm_assignment_adapter import encode_assignment_v1
+
+
+def exact_wire_protocol_max(payload):
+    """Independent interpreter of assignment-v1's wire-format constraints.
+
+    Avoid calling Python duty rule functions here: the objective is to
+    establish whether the anonymous eligibility/conflict/pin encoding
+    preserves the solution space of the source native model.
+    """
+    parts = payload.splitlines()
+    if len(parts) != 5 or parts[0] != "assignment-v1":
+        raise AssertionError("Malformed assignment-v1 frame")
+    tasks, people = map(int, parts[1].split())
+    mask, links, fixes = parts[2], parts[3], parts[4]
+    if len(mask) != tasks * people:
+        raise AssertionError("Truncated eligibility matrix")
+    edges = ([tuple(map(int, x.split(":"))) for x in links.split(";")]
+             if links else [])
+    pins = list(map(int, fixes.split(",")))
+    if len(pins) != tasks:
+        raise AssertionError("Truncated fixed assignments")
+    options = []
+    for s in range(tasks):
+        available = [-1] + [p for p in range(people)
+                            if mask[s * people + p] == "1"]
+        if pins[s] == -1:
+            available = [-1]
+        elif pins[s] >= 0:
+            available = [pins[s]]
+        options.append(available)
+    best = -1
+    for assignment in product(*options):
+        if any(assignment[a] >= 0 and assignment[a] == assignment[b]
+               for a, b in edges):
+            continue
+        best = max(best, sum(p >= 0 for p in assignment))
+    return best
 
 
 class DifferentialFillTests(unittest.TestCase):
@@ -94,6 +132,15 @@ class DifferentialFillTests(unittest.TestCase):
             self.assertTrue(independently_check(
                 tasks, people, split["assignments"],
                 events, history, pins))
+            # Differentially verify the *actual anonymous WASM input* carries
+            # the same maximal-fill optimum as the native CP-SAT model.
+            # This checks the wire model without claiming C++ WASM is solved.
+            frame = encode_assignment_v1(
+                tasks, people, events=events, history=history, pins=pins)
+            wire_best = exact_wire_protocol_max(frame["payload"])
+            self.assertEqual(
+                wire_best, exact_max,
+                f"WASM wire-format mismatch in group {group} case {case}")
             tested += 1
         print(f"PASS: exact reference vs real CP-SAT, seed_group={group}, cases={tested}")
 
