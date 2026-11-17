@@ -155,7 +155,7 @@ class V7BridgeTests(unittest.TestCase):
     def test_invalid_pin_rejected(self):
         data = fake_backup()
         data["months"]["2026-12"]["pins"] = {"door:2026-12-07:6": "H001"}
-        with self.assertRaisesRegex(BridgeError, "不在本月"):
+        with self.assertRaisesRegex(BridgeError, "格式不符合 v7 日期序號"):
             convert_v7_backup(data)
 
     def test_kitchen_and_half_width_delimiters(self):
