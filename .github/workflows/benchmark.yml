@@ -1,0 +1,30 @@
+# Diagnostic benchmark: entirely synthetic; no operational information.
+name: Native CP-SAT 589-shift synthetic benchmark
+on:
+  push:
+    paths:
+      - '.github/workflows/benchmark.yml'
+      - 'benchmarks/native_589.py'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  native-589:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install official native OR-Tools
+        run: python -m pip install --disable-pip-version-check ortools==9.15.6755
+      - name: Run real CP-SAT on synthetic 589-shift model (with verified warm-start)
+        run: python -m benchmarks.native_589
+      - name: Publish result even if timeout returned UNKNOWN
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: native-589-structured-result
+          path: native_589_benchmark.json
+          if-no-files-found: error
