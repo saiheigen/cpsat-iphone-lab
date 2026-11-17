@@ -1,0 +1,55 @@
+# Only a proven genuine CP-SAT WASM artifact may produce this iPhone file.
+name: Package proven CP-SAT WASM for iPhone
+on:
+  workflow_run:
+    workflows: ["Experimental CP-SAT WebAssembly"]
+    types: [completed]
+  workflow_dispatch:
+    inputs:
+      source_run_id:
+        description: "Successful genuine CP-SAT WebAssembly workflow run ID"
+        required: true
+        type: string
+permissions:
+  actions: read
+  contents: read
+jobs:
+  package:
+    if: >-
+      (github.event_name == 'workflow_run' &&
+       github.event.workflow_run.conclusion == 'success' &&
+       github.event.workflow_run.head_repository.full_name == github.repository) ||
+      github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: Download the genuine Node-verified solver output
+        uses: actions/download-artifact@v4
+        with:
+          name: genuine-cpsat-wasm-smoke-test
+          run-id: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.id || inputs.source_run_id }}
+          repository: ${{ github.repository }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          path: source
+      - name: Re-execute genuine solver using Node and independent oracle
+        run: |
+          test -s source/cp_sat_probe.js
+          test -s source/cp_sat_probe.wasm
+          test -s source/real_smoke_result.json
+          node build/real_solver_smoke.cjs \
+            source/cp_sat_probe.js source/cp_sat_probe.wasm source/reverified.json
+      - name: Create offline single-file iPhone HTML (only after proof gate)
+        run: |
+          python3 build/package_iphone_cp_sat.py \
+            source/cp_sat_probe.js source/cp_sat_probe.wasm \
+            source/reverified.json dist/iphone_cp_sat_real_smoke.html
+          test -s dist/iphone_cp_sat_real_smoke.html
+      - name: Publish phone test artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: iphone-genuine-cp-sat-smoke-test
+          path: |
+            dist/iphone_cp_sat_real_smoke.html
+            source/reverified.json
+          if-no-files-found: error
