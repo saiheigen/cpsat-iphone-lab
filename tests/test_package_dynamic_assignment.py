@@ -60,7 +60,6 @@ class DynamicPackageGateTests(unittest.TestCase):
         self.assertIn("createAssignmentModule", page)
         self.assertIn("assignment-v1", page)
         self.assertIn("WebAssembly.validate", page)
-        self.assertIn("實際", page) if False else None
         self.assertIn("虛構", page)
         self.assertNotIn("guard-offline-v5", page)
         self.assertIn(self.data["wasm_sha256"], page)
