@@ -240,12 +240,27 @@ def prepare(tasks: list[Shift], persons: list[Person],
         for d, v in active.items():
             if d + DAY in active:
                 model.add(v + active[d + DAY] <= 1)
-        # No 2 shifts too close on one day; no same shift on days <= 2 apart.
-        # Pair constraints are explicit to simplify independent auditing.
-        for i, (a, va) in enumerate(xs):
-            for b, vb in xs[i + 1:]:
-                if abs((a.day - b.day).days) <= 7 and conflicts(a, b):
-                    model.add(va + vb <= 1)
+        # Scale as O(days * slots^2), not O(month_shifts^2) per person.
+        # Next-day rest was already enforced through the daily active booleans.
+        by_day_num = {(t.day, t.num): v for t, v in xs}
+        for d, entries in by_day.items():
+            if by_id[person_id].pool == "door":
+                for (a, va), (b, vb) in combinations(entries, 2):
+                    if conflicts(a, b):
+                        model.add(va + vb <= 1)
+            # Same shift number may not recur on day +1 or day +2.
+            for t, v in entries:
+                for offset in (1, 2):
+                    other = by_day_num.get((d + offset * DAY, t.num))
+                    if other is not None:
+                        model.add(v + other <= 1)
+            # Consecutive Sundays' standby; the exact eligible time windows
+            # are defined by Shift.sunday_standby (based on existing v7 slots).
+            standby = [v for t, v in entries if t.sunday_standby]
+            next_sunday = [v for t, v in by_day.get(d + 7 * DAY, [])
+                           if t.sunday_standby]
+            if standby and next_sunday:
+                model.add(sum(standby + next_sunday) <= 1)
 
     model.maximize(sum(assignments.values()))
     return model, assignments
