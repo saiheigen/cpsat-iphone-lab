@@ -43,3 +43,19 @@ target_link_options(cp_sat_assignment_bridge PRIVATE
   "-sEXPORTED_FUNCTIONS=['_solve_assignment_v1','_malloc','_free']"
   "-sEXPORTED_RUNTIME_METHODS=['ccall']"
 )
+
+
+# Full-calendar anonymous guard-month-v2 EXPERIMENTAL solver. The original
+# fixed probe and assignment-v1 targets remain unchanged.
+add_executable(cp_sat_month_bridge cp_sat_month_bridge.cc)
+target_compile_features(cp_sat_month_bridge PRIVATE cxx_std_20)
+target_link_libraries(cp_sat_month_bridge PRIVATE ortools::ortools)
+target_compile_options(cp_sat_month_bridge PRIVATE -fexceptions)
+set_target_properties(cp_sat_month_bridge PROPERTIES SUFFIX ".js")
+target_link_options(cp_sat_month_bridge PRIVATE
+  -O2 -fexceptions -sMODULARIZE=1 -sEXPORT_NAME=createMonthModule
+  -sSINGLE_FILE=0 -sALLOW_MEMORY_GROWTH=1
+  -sENVIRONMENT=web,worker,node -sNO_EXIT_RUNTIME=1 -sASSERTIONS=1
+  "-sEXPORTED_FUNCTIONS=['_solve_guard_month_v2','_malloc','_free']"
+  "-sEXPORTED_RUNTIME_METHODS=['ccall']"
+)
