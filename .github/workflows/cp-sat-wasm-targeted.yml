@@ -1,0 +1,90 @@
+# Only synthetic OR-Tools CP-SAT test; NEVER store military or personal rosters.
+# The experimental #5 run is not modified or cancelled by this workflow.
+name: Targeted CP-SAT WebAssembly build
+
+on:
+  workflow_run:
+    workflows: ["Experimental CP-SAT WebAssembly"]
+    types: [completed]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  targeted-cpsat:
+    # Run automatically only if the existing #5 attempt fails/times out,
+    # or manually when explicitly dispatched. No duplicate expensive build.
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.workflow_run.run_number == 5 &&
+       github.event.workflow_run.head_repository.full_name == github.repository &&
+       (github.event.workflow_run.conclusion == 'failure' ||
+        github.event.workflow_run.conclusion == 'timed_out'))
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    steps:
+      - name: Check out trusted synthetic source
+        uses: actions/checkout@v4
+      - name: Install Emscripten for WebAssembly
+        uses: emscripten-core/setup-emsdk@v15
+        with:
+          version: '4.0.12'
+      - name: Prepare CMake/Ninja and check WebAssembly compiler
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y cmake ninja-build git python3
+          emcc --version
+          node --version
+      - name: Fetch exact upstream stable OR-Tools source for targeted build
+        run: |
+          mkdir -p .build
+          git clone --depth 1 --branch stable https://github.com/google/or-tools.git .build/or-tools
+          git -C .build/or-tools rev-parse HEAD | tee .build/ortools_commit.txt
+      - name: Repair known upstream host_tools Ninja protoc tracking
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          file = Path(".build/or-tools/cmake/host.cmake")
+          content = file.read_text()
+          old = "OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/host_tools\n"
+          dep = "DEPENDS ${CMAKE_CURRENT_BINARY_DIR}/host_tools\n"
+          new = "OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/host_tools/bin/protoc\n"
+          if content.count(old) != 1 or content.count(dep) != 1:
+              raise SystemExit("Upstream changed. Refuse unsafe source patch.")
+          file.write_text(content.replace(old, new).replace(dep, new.replace("OUTPUT", "DEPENDS")))
+          PY
+      - name: Configure only target probe and transitive OR-Tools libraries
+        run: |
+          emcmake cmake -S src -B .build/probe -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DORTOOLS_SOURCE_DIR="${{ github.workspace }}/.build/or-tools" \
+            -DBUILD_DEPS=ON -DBUILD_CXX=ON \
+            -DBUILD_SHARED_LIBS=OFF -DBUILD_TESTING=OFF \
+            -DBUILD_EXAMPLES=OFF -DBUILD_SAMPLES=OFF \
+            -DBUILD_PYTHON=OFF -DBUILD_JAVA=OFF -DBUILD_DOTNET=OFF \
+            -DUSE_COINOR=OFF -DUSE_GLPK=OFF -DUSE_HIGHS=OFF \
+            -DUSE_PDLP=OFF -DUSE_SCIP=OFF
+      - name: Build only cp_sat_probe instead of upstream all binaries
+        run: |
+          cmake --build .build/probe --target cp_sat_probe --parallel 4
+          test -s .build/probe/cp_sat_probe.js
+          test -s .build/probe/cp_sat_probe.wasm
+      - name: Run real CP-SAT WASM in Node plus independent oracle
+        run: |
+          node build/real_solver_smoke.cjs \
+            .build/probe/cp_sat_probe.js \
+            .build/probe/cp_sat_probe.wasm \
+            .build/probe/real_smoke_result.json
+      - name: Upload only a genuinely verified solver
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: genuine-cpsat-wasm-smoke-test
+          path: |
+            .build/probe/cp_sat_probe.js
+            .build/probe/cp_sat_probe.wasm
+            .build/probe/real_smoke_result.json
+            .build/ortools_commit.txt
+          include-hidden-files: true
+          if-no-files-found: error
