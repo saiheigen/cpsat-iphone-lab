@@ -1,0 +1,69 @@
+# Run the already verified genuine CP-SAT WASM HTML in an actual offline
+# Chromium browser. Mobile emulation is not real iPhone Safari acceptance.
+# Test is synthetic and never downloads/receives personnel or duty records.
+name: Offline browser acceptance of genuine CP-SAT WASM
+on:
+  push:
+    paths:
+      - '.github/workflows/browser-genuine-cpsat.yml'
+      - 'tests/browser_real_cpsat.py'
+  workflow_run:
+    workflows: ["Package proven CP-SAT WASM for iPhone"]
+    types: [completed]
+  workflow_dispatch:
+    inputs:
+      source_run_id:
+        description: "Successful iPhone CP-SAT packaging workflow run ID"
+        required: true
+        type: string
+
+permissions:
+  actions: read
+  contents: read
+
+jobs:
+  real-browser:
+    if: >-
+      github.event_name != 'workflow_run' ||
+      (github.event.workflow_run.conclusion == 'success' &&
+       github.event.workflow_run.head_repository.full_name == github.repository)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    env:
+      # For initial push use the *already verified* existing packaging run.
+      # Subsequent successful packaging runs are tested automatically.
+      ARTIFACT_RUN: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.id || (github.event_name == 'workflow_dispatch' && inputs.source_run_id) || '44136847953' }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Download the previously Node-verified genuine offline HTML
+        uses: actions/download-artifact@v4
+        with:
+          name: iphone-genuine-cp-sat-smoke-test
+          run-id: ${{ env.ARTIFACT_RUN }}
+          repository: ${{ github.repository }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          path: received
+      - name: Install real Chromium automation browser
+        run: |
+          python -m pip install --disable-pip-version-check playwright==1.58.0
+          python -m playwright install --with-deps chromium
+      - name: Run actual offline browser CP-SAT, including mobile viewport
+        shell: bash
+        run: |
+          set -euo pipefail
+          mapfile -t pages < <(find received -type f -name 'iphone_cp_sat_real_smoke.html')
+          test "${#pages[@]}" -eq 1
+          test -s "${pages[0]}"
+          python tests/browser_real_cpsat.py "${pages[0]}"
+      - name: Archive runtime result and failure screenshot, even on failure
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: genuine-cpsat-offline-chromium-acceptance
+          path: |
+            browser_cpsat_acceptance.json
+            browser-cpsat-*-failure.png
+          if-no-files-found: warn
