@@ -5,6 +5,8 @@ on:
     paths:
       - '.github/workflows/benchmark-absences.yml'
       - 'benchmarks/split_absence_589.py'
+      - 'solver/split_fill_cp_sat.py'
+      - 'solver/constructive_witness.py'
   workflow_dispatch:
 permissions:
   contents: read
