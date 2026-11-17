@@ -2,7 +2,7 @@
 name: Package proven CP-SAT WASM for iPhone
 on:
   workflow_run:
-    workflows: ["Experimental CP-SAT WebAssembly"]
+    workflows: ["Experimental CP-SAT WebAssembly", "Targeted CP-SAT WebAssembly build"]
     types: [completed]
   workflow_dispatch:
     inputs:
