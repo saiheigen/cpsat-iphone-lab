@@ -1,0 +1,38 @@
+# Repeat real native CP-SAT with different deterministic synthetic cases.
+# Absolutely no private personnel or operational roster data in GitHub.
+name: Three-way deterministic CP-SAT audit
+on:
+  push:
+    paths:
+      - '.github/workflows/synthetic-audit.yml'
+      - 'tests/test_synthetic_bruteforce.py'
+      - 'solver/roster_cp_sat.py'
+      - 'solver/v7_backup_bridge.py'
+      - 'solver/fairness_cp_sat.py'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  native-crosscheck:
+    name: Audit synthetic seed group ${{ matrix.seed }}
+    strategy:
+      fail-fast: false
+      matrix:
+        seed: [0, 1, 2]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install official OR-Tools native CP-SAT
+        run: python -m pip install --disable-pip-version-check ortools==9.15.6755
+      - name: 30 small randomized exact brute-force oracle comparisons
+        env:
+          AUDIT_SEED: ${{ matrix.seed }}
+        run: python -m unittest discover -s tests -p 'test_synthetic_bruteforce.py' -v
+      - name: Verify all v7 bridge and layered fairness regressions
+        run: |
+          python -m unittest discover -s tests -p 'test_v7_backup_bridge.py' -v
+          python -m unittest discover -s tests -p 'test_fairness_cp_sat.py' -v
