@@ -33,16 +33,28 @@ jobs:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           path: source
       - name: Re-execute genuine solver using Node and independent oracle
+        shell: bash
         run: |
-          test -s source/cp_sat_probe.js
-          test -s source/cp_sat_probe.wasm
-          test -s source/real_smoke_result.json
+          set -euo pipefail
+          # The artifact directory structure may differ between build flows.
+          # Exactly one of each file is required. Never guess ambiguous inputs.
+          mapfile -t js < <(find source -type f -name 'cp_sat_probe.js')
+          mapfile -t wasm < <(find source -type f -name 'cp_sat_probe.wasm')
+          mapfile -t proof < <(find source -type f -name 'real_smoke_result.json')
+          test "${#js[@]}" -eq 1
+          test "${#wasm[@]}" -eq 1
+          test "${#proof[@]}" -eq 1
+          test -s "${js[0]}" && test -s "${wasm[0]}" && test -s "${proof[0]}"
+          printf 'CP_SAT_JS=%s\n' "${js[0]}" >> "$GITHUB_ENV"
+          printf 'CP_SAT_WASM=%s\n' "${wasm[0]}" >> "$GITHUB_ENV"
           node build/real_solver_smoke.cjs \
-            source/cp_sat_probe.js source/cp_sat_probe.wasm source/reverified.json
+            "${js[0]}" "${wasm[0]}" source/reverified.json
       - name: Create offline single-file iPhone HTML (only after proof gate)
+        shell: bash
         run: |
+          set -euo pipefail
           python3 build/package_iphone_cp_sat.py \
-            source/cp_sat_probe.js source/cp_sat_probe.wasm \
+            "$CP_SAT_JS" "$CP_SAT_WASM" \
             source/reverified.json dist/iphone_cp_sat_real_smoke.html
           test -s dist/iphone_cp_sat_real_smoke.html
       - name: Publish phone test artifact
