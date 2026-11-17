@@ -6,6 +6,8 @@ on:
     paths:
       - '.github/workflows/synthetic-audit.yml'
       - 'tests/test_synthetic_bruteforce.py'
+      - 'tests/test_v7_backup_bridge.py'
+      - 'tests/test_fairness_cp_sat.py'
       - 'solver/roster_cp_sat.py'
       - 'solver/v7_backup_bridge.py'
       - 'solver/fairness_cp_sat.py'
