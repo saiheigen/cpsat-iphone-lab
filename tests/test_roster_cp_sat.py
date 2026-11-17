@@ -169,5 +169,37 @@ class NativeCpSatTests(unittest.TestCase):
             prepare([Shift("door", D(1), 6)], person, history=history)
 
 
+
+class BoundaryOptimizationTests(unittest.TestCase):
+    def test_three_spaced_door_shifts_allowed(self):
+        who = [Person("H001", "door")]
+        shifts = [Shift("door", D(1), n) for n in (2, 6, 10)]
+        result = solve(shifts, who, seconds=5)
+        self.assertEqual(result["status"], "OPTIMAL")
+        self.assertEqual(result["filled"], 3)
+
+    def test_four_daily_door_shifts_forced_is_impossible(self):
+        who = [Person("H001", "door")]
+        shifts = [Shift("door", D(1), n) for n in (2, 6, 10, 12)]
+        result = solve(shifts, who, seconds=5)
+        self.assertEqual(result["status"], "OPTIMAL")
+        self.assertEqual(result["filled"], 3)
+
+    def test_sunday_standby_cannot_repeat_next_week(self):
+        people = [Person("H001", "door")]
+        shifts = [Shift("door", D(15, 11), 5),
+                  Shift("door", D(22, 11), 11)]
+        result = solve(shifts, people, seconds=5)
+        self.assertEqual(result["filled"], 1)
+
+    def test_prev_month_two_day_same_slot_block(self):
+        people = [Person("H001", "door")]
+        shifts = [Shift("door", D(2), 6), Shift("door", D(3), 6)]
+        history = [History("H001", Shift("door", D(30, 11), 6))]
+        result = solve(shifts, people, history=history, seconds=5)
+        self.assertIsNone(result["assignments"][shifts[0].key])
+        self.assertEqual(result["filled"], 1)
+
+
 if __name__ == "__main__":
     unittest.main()
