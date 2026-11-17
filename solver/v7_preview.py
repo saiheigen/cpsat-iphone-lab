@@ -12,7 +12,7 @@ from __future__ import annotations
 from datetime import date
 from typing import Mapping
 
-from solver.roster_cp_sat import independently_check
+from solver.roster_cp_sat import independently_check, month_shifts
 
 _EPOCH = date(1970, 1, 1)
 
@@ -43,8 +43,22 @@ def preview_v7_shape(bridge, solver_output):
     if solver_output.get("filled") != filled or solver_output.get("missing") != missing:
         raise ValueError("Solver metrics do not match independently audited schedule")
     expected_month = bridge.month
-    if len(expected_month) != 7 or any(t.day.strftime("%Y-%m") != expected_month for t in bridge.tasks):
-        raise ValueError("Preview shift date outside selected month")
+    try:
+        year, month = map(int, expected_month.split("-"))
+        reference = month_shifts(year, month)
+    except (AttributeError, TypeError, ValueError):
+        raise ValueError("Invalid preview month") from None
+    if {t.key for t in bridge.tasks} != {t.key for t in reference}:
+        raise ValueError("Preview must contain the entire month; partial grids rejected")
+    status = solver_output.get("status")
+    proof = bool(solver_output.get("optimal_fill_proven", False))
+    if status not in ("FULL", "PARTIAL_OPTIMAL", "PARTIAL_FEASIBLE"):
+        raise ValueError("Unsupported or incomplete solver result status")
+    if (status == "FULL") != (missing == 0):
+        raise ValueError("FULL status contradicts occupancy")
+    if (status == "PARTIAL_OPTIMAL") != (proof and missing > 0):
+        if status == "PARTIAL_OPTIMAL" or (proof and missing > 0):
+            raise ValueError("Partial optimality flag and status disagree")
     schedule = {"door": [], "officer": []}
     for t in bridge.tasks:
         day_serial = (t.day - _EPOCH).days
