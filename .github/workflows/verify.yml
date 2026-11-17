@@ -1,0 +1,54 @@
+name: iPhone WASM baseline and native CP-SAT
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  wasm-baseline:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - name: Setup Emscripten
+        uses: emscripten-core/setup-emsdk@v15
+        with:
+          version: '4.0.14'
+      - name: Confirm compiler
+        run: emcc --version
+      - name: Build real WebAssembly as single file
+        run: |
+          mkdir -p dist
+          emcc src/wasm_smoke.c -O2 -sWASM=1 -sSINGLE_FILE=1 -sMODULARIZE=1 -sEXPORT_NAME=createSmokeModule -sENVIRONMENT=web,worker,node -sEXPORTED_FUNCTIONS='["_smoke_add"]' -o dist/smoke.js
+          node tests/smoke_node.cjs
+          python3 scripts/package_single_html.py dist/smoke.js dist/iphone_smoke.html
+          test -s dist/iphone_smoke.html
+      - name: Upload iPhone single-file baseline (NOT CP-SAT)
+        uses: actions/upload-artifact@v4
+        with:
+          name: iphone-wasm-baseline
+          path: dist/iphone_smoke.html
+          if-no-files-found: error
+
+  native-cpsat:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install official native OR-Tools
+        run: python -m pip install --disable-pip-version-check ortools==9.15.6755
+      - name: Run real native CP-SAT OPTIMAL test (NOT WASM)
+        run: python tests/native_cpsat.py | tee native_cpsat_result.json
+      - name: Upload native CP-SAT evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: native-cpsat-result
+          path: native_cpsat_result.json
+          if-no-files-found: error
