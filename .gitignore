@@ -1,0 +1,12 @@
+node_modules/
+dist/
+build-output/
+*.log
+.env
+*.zip
+*.json.bak
+!package.json
+!package-lock.json
+# Do not commit personnel or operational schedules
+real-roster/
+private-data/
