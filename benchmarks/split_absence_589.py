@@ -68,6 +68,7 @@ def main():
                 "missing": data["missing"],
                 "full_feasibility": data["full_feasibility"],
                 "fallback": data["fallback"],
+                "solution_source": data.get("solution_source", "unknown"),
                 "optimal_fill_proven": data["optimal_fill_proven"],
                 "seconds": data["seconds"],
             }
