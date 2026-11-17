@@ -191,7 +191,7 @@ class V7BridgeTests(unittest.TestCase):
         from solver.v7_backup_bridge import _date_token
         self.assertEqual(_date_token("2/29", date(2028, 2, 1)), date(2028, 2, 29))
         with self.assertRaisesRegex(BridgeError, "不存在"):
-            _date_token("2/29", date(2027, 2, 1))
+            _date_token("2/29", date(2026, 2, 1))
 
     def test_invalid_previous_month_identity_rejected(self):
         data = fake_backup()
