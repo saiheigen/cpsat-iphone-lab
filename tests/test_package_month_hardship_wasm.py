@@ -112,14 +112,23 @@ class HardshipPackagerGateTests(unittest.TestCase):
             self.js,self.wasm,self.proof,self.fixtures)
         packer.make(js,wasm,proof,fixtures,self.html)
         text=self.html.read_text("utf-8")
-        self.assertEqual(text.count("<script>"),2)
-        audit_script=text.split("<script>",2)[2].split("</script>",1)[0]
+        self.assertEqual(text.count("<script"),2)
+        audit_script=text.split('<script id="phase5-wasm-glue">',1)[1].split("</script>",1)[1].split("<script>",1)[1].split("</script>",1)[0]
         self.assertNotIn("__CASES__",audit_script)
         result=subprocess.run(["node","--check","-"],input=audit_script,
                               capture_output=True,text=True,check=False)
         self.assertEqual(result.returncode,0,result.stderr)
         self.assertIn("hardshipScore",audit_script)
         self.assertIn("solve_guard_month_harsh_v4",audit_script)
+        self.assertIn("dedicated-worker",audit_script)
+        self.assertIn("WORKER_BOOTSTRAP=",audit_script)
+        self.assertNotIn("__WORKER_BOOTSTRAP__",audit_script)
+        worker=SCRIPT.parents[1]/"src"/"phase5_hardship_worker.js"
+        worker_check=subprocess.run(["node","--check",str(worker)],
+                                    capture_output=True,text=True,check=False)
+        self.assertEqual(worker_check.returncode,0,worker_check.stderr)
+        self.assertIn("self.postMessage({type:",worker.read_text("utf-8"))
+        self.assertNotIn("importScripts(",worker.read_text("utf-8"))
 
     def test_changed_binary_rejected(self):
         self.wasm.write_bytes(self.wasm.read_bytes()+b"t")
