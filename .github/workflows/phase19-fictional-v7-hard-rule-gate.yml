@@ -1,0 +1,106 @@
+# Fictional events ONLY; never upload operational v7 records or masks.
+name: Phase 19 fictional v7 hard rules genuine WASM gate
+on:
+  push:
+    paths:
+      - 'solver/phase19_fictional_v7_hard_rules.py'
+      - 'tests/test_phase19_fictional_v7_hard_rules.py'
+      - 'tests/phase19_genuine_v4_rule_gate.cjs'
+      - 'scripts/phase19_emit_fictional_months.py'
+      - 'scripts/phase19_audit_fictional_v4.py'
+      - '.github/workflows/phase19-fictional-v7-hard-rule-gate.yml'
+  pull_request:
+    paths:
+      - 'solver/phase19_fictional_v7_hard_rules.py'
+      - 'tests/test_phase19_fictional_v7_hard_rules.py'
+      - 'tests/phase19_genuine_v4_rule_gate.cjs'
+      - 'scripts/phase19_emit_fictional_months.py'
+      - 'scripts/phase19_audit_fictional_v4.py'
+      - '.github/workflows/phase19-fictional-v7-hard-rule-gate.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+  actions: read
+jobs:
+  invented-month-native-rules:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    env:
+      PYTHONPATH: .
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install pinned native OR-Tools only for synthetic rule construction
+        run: python -m pip install --disable-pip-version-check ortools==9.15.6755
+      - name: Compile Python sources and check genuine Node acceptance syntax
+        run: |
+          python -m py_compile solver/phase19_fictional_v7_hard_rules.py scripts/phase19_emit_fictional_months.py scripts/phase19_audit_fictional_v4.py tests/test_phase19_fictional_v7_hard_rules.py
+          node --check tests/phase19_genuine_v4_rule_gate.cjs
+      - name: Run fictional boundary hard-rule unit and forged-output rejection cases
+        run: python -m unittest discover -s tests -p 'test_phase19_fictional_v7_hard_rules.py' -v
+  genuine-synthetic-event-wasm:
+    needs: invented-month-native-rules
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    env:
+      PYTHONPATH: .
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install pinned native OR-Tools for independent input and output audits
+        run: python -m pip install --disable-pip-version-check ortools==9.15.6755
+      - name: Download previously attested genuine C++ OR-Tools WebAssembly
+        uses: actions/download-artifact@v4
+        with:
+          name: experimental-full-month-harsh-cpsat-wasm-with-proof
+          run-id: 44223914115
+          repository: ${{ github.repository }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          path: received
+      - name: Check and rerun genuinely compiled WASM proof before hard-rule cases
+        shell: bash
+        run: |
+          set -euo pipefail
+          for fname in cp_sat_month_hardship_bridge.js cp_sat_month_hardship_bridge.wasm full_month_hardship_wasm_proof.json; do
+            test "$(find received -type f -name "$fname" | wc -l)" -eq 1
+          done
+          mkdir -p proof
+          js="$(find received -type f -name cp_sat_month_hardship_bridge.js)"
+          wasm="$(find received -type f -name cp_sat_month_hardship_bridge.wasm)"
+          old="$(find received -type f -name full_month_hardship_wasm_proof.json)"
+          node tests/month_hardship_real_wasm.cjs "$js" "$wasm" proof/real_hardship_node_proof.json
+          python - "$old" proof/real_hardship_node_proof.json <<'PY'
+          import json,sys
+          from pathlib import Path
+          old=json.loads(Path(sys.argv[1]).read_text())
+          new=json.loads(Path(sys.argv[2]).read_text())
+          assert old['accepted'] is True and new['accepted'] is True
+          for key in ['contract','wasm_sha256','js_sha256']:
+              assert old[key]==new[key],key
+          assert old['operationally_certified'] is False
+          PY
+          echo "HARD_JS=$js" >> "$GITHUB_ENV"
+          echo "HARD_WASM=$wasm" >> "$GITHUB_ENV"
+      - name: Emit entirely invented full-month door/officer prohibition matrices
+        run: python scripts/phase19_emit_fictional_months.py
+      - name: Solve event-aware invented complete months using genuine WASM
+        run: |
+          node tests/phase19_genuine_v4_rule_gate.cjs "$HARD_JS" "$HARD_WASM" phase19_fictional_wasm_input.json phase19_fictional_wasm_output.json
+      - name: Independently re-audit every returned assignment against original invented absences
+        run: python scripts/phase19_audit_fictional_v4.py
+      - name: Store only synthetic metadata and audit proof
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: phase19-fictional-event-v4-wasm-independent-audit
+          path: |
+            phase19_fictional_rules_proof.json
+            proof/real_hardship_node_proof.json
+          if-no-files-found: warn
