@@ -48,8 +48,10 @@ def run(browser, html: Path, mobile: bool):
                     raise AssertionError("Old case falsely remains approved after selection")
                 if (page.locator("#vacancy-details").is_visible() or
                         page.locator("#vacancy-details").get_attribute("open") is not None or
-                        page.locator("#vacancy-list li").count()):
-                    raise AssertionError("Old case vacancy disclosure state remained active")
+                        page.locator("#vacancy-list li").count() or
+                        page.locator("#roster-preview").is_visible() or
+                        page.locator("#roster-days li").count()):
+                    raise AssertionError("Old case preview or vacancy state remained active")
             page.locator("#run").click(timeout=30000)
             page.wait_for_function(
                 """() => {
@@ -103,6 +105,23 @@ def run(browser, html: Path, mobile: bool):
                         raise AssertionError("Vacancy slot not displayed on correct day")
             elif details.is_visible() or page.locator("#vacancy-list li").count():
                 raise AssertionError("Stale vacancy list remains after complete fill")
+            roster=page.locator("#roster-preview")
+            if not roster.is_visible():
+                raise AssertionError("Full synthetic-month roster preview is hidden")
+            if roster.get_attribute("open") is not None:
+                raise AssertionError("New roster preview should start collapsed")
+            if page.locator("#roster-days .roster-day").count()!=shift_count//(12 if case.startswith("door") or case=="tiny" else 7):
+                raise AssertionError("Missing one or more preview days")
+            if page.locator("#roster-days li").count()!=shift_count:
+                raise AssertionError("Truncated synthetic-month roster preview")
+            roster.locator("summary").click()
+            if not page.locator("#roster-days").is_visible():
+                raise AssertionError("Synthetic-month roster cannot be expanded")
+            preview_lines=page.locator("#roster-days li").all_inner_texts()
+            if sum("｜缺班" in line for line in preview_lines)!=shift_count-filled:
+                raise AssertionError("Preview hides or changes unfilled shifts")
+            if any("虛構人員" not in line and "缺班" not in line for line in preview_lines):
+                raise AssertionError("Preview has an unrecognized person or blank shift")
             if result.get("status") not in ("OPTIMAL","FEASIBLE"):
                 raise AssertionError("No legal WASM result")
             if result["final_abs_deviation"]>result["phase1_abs_deviation"]:
