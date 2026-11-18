@@ -176,6 +176,14 @@ padding:13px;font-size:12px}small{display:block;color:#647586;overflow-wrap:anyw
 <ol id="vacancy-list"></ol></details>
 <details id="roster-preview" hidden><summary>查看整月虛構班表預覽（不可匯入正式網站）</summary>
 <div id="roster-days"></div></details>
+<section id="combined-workspace" aria-label="雙勤務虛構整月預覽">
+<p>跨勤務完整月預覽：須先分別完成「安官整月」與「大門強制缺班」兩個真正 WASM 測試。</p>
+<button id="combined-run" disabled>顯示大門＋安官 589 班預覽</button>
+<p id="combined-status" role="status">尚缺兩個已驗證的虛構情境</p>
+<details id="combined-preview" hidden><summary>查看雙勤務每日班次（不可匯入正式網站）</summary>
+<div id="combined-days"></div></details>
+<pre id="combined-output">尚無雙勤務已驗證資料</pre>
+</section>
 <pre id="output">沒有結果</pre>
 <small>WASM SHA-256：__WASM_SHA__</small>
 </main><script>__GLUE__</script>
@@ -327,8 +335,26 @@ const vacancyTitle=document.getElementById("vacancy-title");
 const vacancyList=document.getElementById("vacancy-list");
 const rosterDetails=document.getElementById("roster-preview");
 const rosterDays=document.getElementById("roster-days");
+const combinedBtn=document.getElementById("combined-run");
+const combinedStatus=document.getElementById("combined-status");
+const combinedDetails=document.getElementById("combined-preview");
+const combinedDays=document.getElementById("combined-days");
+const combinedOutput=document.getElementById("combined-output");
+const combinedCases=["door-forced-vacancies","officer-blackouts-no-hints"];
+const acceptedSynthetic=new Map();
+function clearCombinedView(){
+ combinedDetails.hidden=true;combinedDetails.open=false;combinedDays.replaceChildren();
+ combinedOutput.textContent="尚無本次合併預覽";
+}
+function updateCombinedReadiness(){
+ combinedBtn.disabled=!combinedCases.every(id=>acceptedSynthetic.has(id));
+ combinedStatus.textContent=combinedBtn.disabled?
+  "請先成功求解安官整月與大門強制缺班情境":
+  "兩個虛構月份已分別求解與驗證，可建立 589 班合併預覽";
+}
 let runtime=null;
 select.addEventListener("change",()=>{
+ clearCombinedView();updateCombinedReadiness();
  status.textContent="已切換情境，請重新執行求解";
  summary.textContent="尚無這個情境的已驗證結果";
  out.textContent="沒有這個情境的求解結果";
@@ -336,6 +362,10 @@ select.addEventListener("change",()=>{
  rosterDetails.hidden=true;rosterDetails.open=false;rosterDays.replaceChildren();
 });
 btn.addEventListener("click",async()=>{
+ clearCombinedView();
+ const selected=select.value;
+ if(combinedCases.includes(selected))acceptedSynthetic.delete(selected);
+ updateCombinedReadiness();
  btn.disabled=true;status.textContent="正在本機執行三階段求解…";
  out.textContent="尚待獨立驗證";summary.textContent="正在計算，尚無已驗證班表";
  vacancyDetails.hidden=true;vacancyDetails.open=false;vacancyList.replaceChildren();
@@ -390,6 +420,10 @@ btn.addEventListener("click",async()=>{
    section.append(title,list);rosterDays.appendChild(section);
   }
   rosterDetails.hidden=false;rosterDetails.open=false;
+  if(combinedCases.includes(t.id)){
+   acceptedSynthetic.set(t.id,{t,got,verified});
+   updateCombinedReadiness();
+  }
   status.textContent="✅ 真正 WASM 三階段合法填班與艱苦公平檢查通過";
   out.textContent=JSON.stringify({accepted:true,scenario:t.id,
    status:got.status,shifts:t.shifts,staff:t.staff,
@@ -413,6 +447,80 @@ btn.addEventListener("click",async()=>{
  rosterDetails.hidden=true;rosterDetails.open=false;rosterDays.replaceChildren();
   out.textContent=String(err&&err.stack||err);
  }finally{btn.disabled=false;}
+});
+combinedBtn.addEventListener("click",()=>{
+ clearCombinedView();
+ combinedStatus.textContent="正在重新獨立核對兩個虛構勤務…";
+ try{
+  if(!combinedCases.every(id=>acceptedSynthetic.has(id)))throw Error("缺少已驗證雙勤務結果");
+  const door=acceptedSynthetic.get("door-forced-vacancies");
+  const officer=acceptedSynthetic.get("officer-blackouts-no-hints");
+  const entries=[["door",door],["officer",officer]];
+  let year=null,month=null,filled=0,missing=0,total=0;
+  const rows={door:[],officer:[]};
+  for(const [pool,data] of entries){
+   if(!data||data.t.pool!==pool||data.t.synthetic_only!==true)
+    throw Error("虛構資料類別驗證失敗");
+   const t=data.t,got=data.got;
+   if(year===null){year=t.year;month=t.month;}
+   if(t.year!==year||t.month!==month)throw Error("不得混合不同月份");
+   const count=new Date(Date.UTC(year,month,0)).getUTCDate()*HOURS[pool].length;
+   if(t.shifts!==count)throw Error("勤務月份班次不完整");
+   const v=independentlyAudit(t,got);
+   if(v.filled!==data.verified.filled||v.missing!==data.verified.missing)
+    throw Error("與先前已核對結果不同");
+   const slots=HOURS[pool].length;
+   for(let i=0;i<got.assignments.length;i++){
+    const person=got.assignments[i],day=Math.floor(i/slots)+1,slot=i%slots+1;
+    const serial=Date.UTC(year,month-1,day)/86400000;
+    if(!Number.isInteger(serial))throw Error("預覽日期序號異常");
+    const syntheticId=person<0?null:
+      "SIM_"+(pool==="door"?"D":"O")+"_"+String(person).padStart(3,"0");
+    rows[pool].push([serial,slot,syntheticId]);
+   }
+   filled+=v.filled;missing+=v.missing;total+=count;
+  }
+  if(total!==589||filled!==577||missing!==12||
+     rows.door.length!==372||rows.officer.length!==217)
+   throw Error("雙勤務填班或缺班數與證明不符");
+  for(const [pool] of entries){
+   const heading=document.createElement("h3");
+   heading.textContent=pool==="door"?"大門衛哨（虛構）":"安全士官（虛構）";
+   combinedDays.appendChild(heading);
+   const slots=HOURS[pool].length;
+   for(let day=1;day<=new Date(Date.UTC(year,month,0)).getUTCDate();day++){
+    const section=document.createElement("section");section.className="roster-day";
+    const title=document.createElement("strong");
+    title.textContent=year+"/"+month+"/"+day;
+    const list=document.createElement("ul");
+    for(let k=0;k<slots;k++){
+     const [serial,slot,person]=rows[pool][(day-1)*slots+k];
+     const li=document.createElement("li");
+     const [start,end]=HOURS[pool][k];
+     li.textContent="第"+slot+"班 "+String(start).padStart(2,"0")+":00–"+
+      String(end).padStart(2,"0")+":00｜"+(person===null?"缺班":person);
+     list.appendChild(li);
+    }
+    section.append(title,list);combinedDays.appendChild(section);
+   }
+  }
+  if(combinedDays.querySelectorAll("li").length!==total)
+   throw Error("合併預覽漏掉班次");
+  combinedOutput.textContent=JSON.stringify({
+   accepted:true,format:"guard-cpsat-synthetic-preview-v1",
+   schema_shape:"v7-month-schedule-rows-v1",
+   month:year+"-"+String(month).padStart(2,"0"),rows:total,
+   filled,missing,door_rows:rows.door.length,officer_rows:rows.officer.length,
+   synthetic_only:true,preview_only:true,importable_as_v7_backup:false,
+   operationally_certified:false,full_v7_rule_parity_verified:false,
+   real_iphone_safari_verified:false
+  },null,2);
+  combinedDetails.hidden=false;combinedDetails.open=false;
+  combinedStatus.textContent="✅ 589 班虛構合併預覽已通過獨立核對；缺班 "+missing+" 班";
+ }catch(e){
+  clearCombinedView();combinedStatus.textContent="❌ 合併預覽拒絕使用";
+  combinedOutput.textContent=String(e&&e.message||e);
+ }
 });
 </script></body></html>"""
 
