@@ -176,9 +176,80 @@ def validate_full_month_v2_export(encoded: dict) -> dict:
             actual = raw[4][i * n_people + j] == "1"
             if actual != should:
                 raise ValueError("Availability or cross-month exclusion was lost")
+    # A candidate hint is merely a solver suggestion, not an approved
+    # schedule. Validate the *whole proposed assignment* when a hint exists
+    # so a corrupted same-day/night/standby hint cannot pass the adapter gate.
+    # The all-(-1) default means "no hint provided" (and may coexist with
+    # an independently valid pinned assignment); it is not a proposed roster.
+    if any(i >= 0 for i in hints):
+        hinted = {
+            t.key: None if pos < 0 else people[pos].id
+            for t, pos in zip(tasks, hints)
+        }
+        try:
+            independently_check(
+                tasks, people, hinted, encoded["events"],
+                encoded["history"], encoded["pins"])
+        except ValueError as exc:
+            raise ValueError(f"Illegal full-month hint: {exc}") from exc
     if any(p.id in payload for p in people):
         raise ValueError("PII identity appeared in anonymous wire frame")
     return {"tasks": n_tasks, "people": n_people, "eligible_bits": raw[4].count("1"),
             "pool": pool, "month": month, "sha256": encoded["sha256"],
             "validated": True, "actual_wasm_solved": False,
             "operationally_certified": False}
+
+
+def audit_full_month_v2_response(encoded: dict, result: dict) -> dict:
+    """Fail-closed independent post-solve audit of a genuine WASM month result.
+
+    INPUT verification is not enough: a C++ solver could accidentally omit
+    a hard constraint. Compare each staff index against the original roster
+    and check every intra-month and cross-month restriction again on the
+    Python side. The helper never accepts UNKNOWN as a vacancy roster.
+    """
+    validated = validate_full_month_v2_export(encoded)
+    if not isinstance(result, dict):
+        raise ValueError("Missing full-month WASM solver result")
+    status = result.get("status")
+    if status not in ("OPTIMAL", "FEASIBLE"):
+        raise ValueError(f"No verified feasible full-month WASM schedule: {status}")
+    tasks = encoded["tasks"]
+    people = encoded["people"]
+    indices = result.get("assignments")
+    if not isinstance(indices, list) or len(indices) != len(tasks):
+        raise ValueError("Missing or truncated full-month assignments")
+    assignments = {}
+    for task, index in zip(tasks, indices):
+        if type(index) is not int or index < -1 or index >= len(people):
+            raise ValueError("Invalid staff index in full-month response")
+        assignments[task.key] = None if index == -1 else people[index].id
+    # Use the *original* availability matrix, even if the solver ignores it.
+    mask = encoded["payload"].splitlines()[4]
+    width = len(people)
+    for i, index in enumerate(indices):
+        if index >= 0 and mask[i * width + index] != "1":
+            raise ValueError("WASM assigned a staff member excluded by eligibility")
+    independently_check(tasks, people, assignments, encoded["events"],
+                        encoded["history"], encoded["pins"])
+    filled = sum(x is not None for x in assignments.values())
+    missing = len(tasks) - filled
+    if type(result.get("filled")) is not int or result["filled"] != filled:
+        raise ValueError("WASM filled count mismatch")
+    if type(result.get("missing")) is not int or result["missing"] != missing:
+        raise ValueError("WASM missing count mismatch")
+    return {
+        "status": status,
+        "pool": validated["pool"],
+        "month": validated["month"],
+        "assignments": assignments,
+        "filled": filled,
+        "missing": missing,
+        "max_fill_proven_for_partial_model": status == "OPTIMAL" or missing == 0,
+        "source": "WASM_RESPONSE_INDEPENDENTLY_AUDITED",
+        "validated_against_original_rules": True,
+        "fairness_optimized": False,
+        "full_operational_rules_verified": False,
+        "real_iphone_safari_verified": False,
+        "operationally_certified": False,
+    }
