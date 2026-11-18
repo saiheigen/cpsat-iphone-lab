@@ -38,6 +38,10 @@ jobs:
           node --check tests/month_real_wasm.cjs
       - name: Check full-month synthetic witness before real WASM build
         run: node tests/month_fixture_preflight.cjs
+      - name: Independently preflight dense full-month synthetic reference (NOT WASM)
+        run: |
+          node --check tests/wasm_dense_month_benchmark.cjs
+          node tests/wasm_dense_month_benchmark.cjs --preflight
       - name: Setup Emscripten
         uses: emscripten-core/setup-emsdk@v15
         with:
