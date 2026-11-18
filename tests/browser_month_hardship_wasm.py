@@ -41,6 +41,8 @@ def run(browser, html: Path, mobile: bool):
     try:
         page.goto(html.resolve().as_uri(),wait_until="domcontentloaded",
                   timeout=90000)
+        if page.locator("#combined-run").is_enabled() or page.locator("#combined-preview").is_visible():
+            raise AssertionError("Unproven two-pool preview already enabled")
         for index,(case,(shift_count,staff,filled)) in enumerate(CASES.items()):
             page.locator("#scenario").select_option(case)
             if index:
@@ -139,6 +141,8 @@ def run(browser, html: Path, mobile: bool):
                 raise AssertionError("Third-stage hardship score worsened or missing")
             if result.get("hardship_optimal_proven") and result["hardship_phase"]!="OPTIMAL":
                 raise AssertionError("False hardship optimality report")
+            if page.locator("#combined-run").is_enabled()!=(case=="door-forced-vacancies"):
+                raise AssertionError("Two-pool preview activation not proof-gated")
             record["cases"].append({
                 "name":case,"filled":result["filled"],
                 "phase1_abs_deviation":result["phase1_abs_deviation"],
@@ -148,6 +152,48 @@ def run(browser, html: Path, mobile: bool):
                 "hardship_initial_score":before,
                 "hardship_final_score":after,
                 "elapsed_ms":result["elapsed_ms"],"accepted":True})
+        page.locator("#combined-run").click()
+        combined_status=page.locator("#combined-status").inner_text()
+        if "✅" not in combined_status or "缺班 12 班" not in combined_status:
+            raise AssertionError("Two-pool combined approval did not pass")
+        combined=json.loads(page.locator("#combined-output").inner_text())
+        for key,expected in {
+            "accepted":True,"format":"guard-cpsat-synthetic-preview-v1",
+            "schema_shape":"v7-month-schedule-rows-v1",
+            "month":"2026-12","rows":589,"filled":577,"missing":12,
+            "door_rows":372,"officer_rows":217,
+            "synthetic_only":True,"preview_only":True,
+            "importable_as_v7_backup":False,"operationally_certified":False,
+            "full_v7_rule_parity_verified":False,
+            "real_iphone_safari_verified":False,
+        }.items():
+            if combined.get(key)!=expected:
+                raise AssertionError("False combined v7 preview field "+key)
+        if not page.locator("#combined-preview").is_visible():
+            raise AssertionError("Combined roster details hidden")
+        if page.locator("#combined-days h3").count()!=2:
+            raise AssertionError("Both duty pools were not identified")
+        if page.locator("#combined-days .roster-day").count()!=62:
+            raise AssertionError("Combined roster lost a day")
+        if page.locator("#combined-days li").count()!=589:
+            raise AssertionError("Combined 589-shift preview was truncated")
+        page.locator("#combined-preview summary").click()
+        lines=page.locator("#combined-days li").all_inner_texts()
+        if sum("｜缺班" in line for line in lines)!=12:
+            raise AssertionError("Combined preview concealed missing shifts")
+        if not any("SIM_D_" in line for line in lines):
+            raise AssertionError("Missing anonymous door personnel")
+        if not any("SIM_O_" in line for line in lines):
+            raise AssertionError("Missing anonymous officer personnel")
+        page.locator("#scenario").select_option("tiny")
+        if (page.locator("#combined-preview").is_visible() or
+                page.locator("#combined-days li").count() or
+                '"accepted": true' in page.locator("#combined-output").inner_text()):
+            raise AssertionError("Stale combined preview survived scenario change")
+        record["combined_preview"]={
+            "accepted":True,"rows":combined["rows"],"filled":combined["filled"],
+            "missing":combined["missing"],"importable_as_v7_backup":False
+        }
         if network:
             raise AssertionError("Page sent external HTTP request: "+str(network))
         if errors:
