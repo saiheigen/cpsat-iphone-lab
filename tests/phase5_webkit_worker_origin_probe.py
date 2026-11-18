@@ -36,15 +36,30 @@ JS=r"""async () => {
   });
 }"""
 
-def probe(browser,mobile,method):
+def probe(browser,mobile,method,offline_emulated):
     ctx=browser.new_context(viewport={"width":390,"height":844} if mobile
                             else {"width":1280,"height":800},
-                            offline=True,is_mobile=mobile,has_touch=mobile)
+                            offline=offline_emulated,is_mobile=mobile,has_touch=mobile)
+    # In the deny-egress variant all HTTP(S) is intercepted and terminated.
+    # This is NOT browser airplane-mode / Playwright offline emulation.
+    if not offline_emulated:
+        ctx.route("http://**/*",lambda route:route.abort())
+        if method=="local_fulfilled_https":
+            target="https://synthetic-worker-probe.invalid/offline.html"
+            def allow_only_document(route):
+                if route.request.url==target:
+                    route.fulfill(status=200,content_type="text/html; charset=utf-8",body=HTML)
+                else:
+                    route.abort()
+            ctx.route("https://**/*",allow_only_document)
+        else:
+            ctx.route("https://**/*",lambda route:route.abort())
     page=ctx.new_page()
     requests=[]
     page.on("request",lambda request: requests.append(request.url))
     record={"engine":"linux-webkit","mobile_emulation":mobile,
-            "load_method":method,"real_iphone_safari":False,
+            "load_method":method,"emulated_offline":offline_emulated,
+            "real_iphone_safari":False,
             "actual_network_egress":False}
     try:
         if method=="about_blank":
@@ -56,7 +71,8 @@ def probe(browser,mobile,method):
                 if route.request.url!=target:
                     raise AssertionError("Unexpected external request: "+route.request.url)
                 route.fulfill(status=200,content_type="text/html; charset=utf-8",body=HTML)
-            ctx.route("**/*",onroute)
+            if offline_emulated:
+                ctx.route("https://**/*",onroute)
             page.goto(target,wait_until="domcontentloaded",timeout=15000)
         elif method=="file":
             with tempfile.TemporaryDirectory() as td:
@@ -76,8 +92,9 @@ def main():
     with sync_playwright() as playwright:
         browser=playwright.webkit.launch(headless=True)
         try:
-            data=[probe(browser,mobile,method)
+            data=[probe(browser,mobile,method,offline)
                   for mobile in (False,True)
+                  for offline in (True,False)
                   for method in ("about_blank","local_fulfilled_https","file")]
         finally:browser.close()
     result={"passed_any_worker":any(r["worker"]=="ready" for r in data),
