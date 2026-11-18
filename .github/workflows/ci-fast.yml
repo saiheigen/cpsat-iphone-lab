@@ -39,6 +39,7 @@ jobs:
         run: |
           node --check integration/month_audit.cjs
           node --check integration/phase5_synthetic_adapter.cjs
+          node --check integration/v4_frame_contract.cjs
           node --check integration/phase5_v7_preview_adapter.cjs
           node --check tests/month_real_wasm.cjs
           node tests/phase5_synthetic_adapter.test.cjs
@@ -50,4 +51,5 @@ jobs:
           python3 -m unittest discover -s tests -p 'test_phase2*.py' -q
           python3 -m unittest discover -s tests -p 'test_iphone_field_evidence.py' -q
           python3 -m unittest discover -s tests -p 'test_ci_budget_policy.py' -q
+          python3 -m unittest discover -s tests -p 'test_v4_wire_contract.py' -q
           python3 tools/check_ci_budget.py

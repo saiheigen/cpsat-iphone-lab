@@ -20,6 +20,14 @@ function normalize(input){
  assert(input.pins.every(v=>Number.isInteger(v)&&v>=-2&&v<input.staff),'Invalid pin value');
  assert(input.hints.every(v=>Number.isInteger(v)&&v>=-1&&v<input.staff),'Invalid hint value');
  assert(input.targets.every(v=>Number.isInteger(v)&&v>=0&&v<=input.shifts),'Invalid target');
+ // Match genuine C++ v4 hard-pin/hint preconditions before WASM.
+ for(let i=0;i<input.shifts;i++){
+  const pin=input.pins[i],hint=input.hints[i],offset=i*input.staff;
+  assert(pin<0||input.mask[offset+pin]==='1','Pinned unavailable person');
+  assert(hint<0||input.mask[offset+hint]==='1','Hint unavailable person');
+  assert(pin!==-1||hint===-1,'Forced vacancy cannot have a hint');
+  assert(pin<0||hint<0||hint===pin,'Hint conflicts with fixed person');
+ }
  return [input.contract,input.year+'-'+String(input.month).padStart(2,'0'),input.pool,
  input.shifts+' '+input.staff,input.mask,input.pins.join(','),input.hints.join(','),
  input.targets.join(',')].join('\n')+'\n';

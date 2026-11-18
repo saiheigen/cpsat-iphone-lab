@@ -35,4 +35,16 @@ for(const count of [100,101,106]){
 const oversized={...s,staff:107,mask:'1'.repeat(s.shifts*107),targets:Array(107).fill(0)};
 assert.throws(()=>normalize(oversized),/staff count/);
 
+const pinnedUnavailable={...s,pins:s.pins.map((v,i)=>i===4?1:v),
+ mask:s.mask.slice(0,9)+'0'+s.mask.slice(10)};
+assert.throws(()=>normalize(pinnedUnavailable),/Pinned unavailable/);
+const hintedUnavailable={...s,hints:s.hints.map((v,i)=>i===4?1:v),
+ mask:s.mask.slice(0,9)+'0'+s.mask.slice(10)};
+assert.throws(()=>normalize(hintedUnavailable),/Hint unavailable/);
+const vacancyHint={...s,pins:s.pins.map((v,i)=>i===4?-1:v),
+ hints:s.hints.map((v,i)=>i===4?0:v)};
+assert.throws(()=>normalize(vacancyHint),/Forced vacancy/);
+const pinHintConflict={...s,pins:s.pins.map((v,i)=>i===4?0:v),
+ hints:s.hints.map((v,i)=>i===4?1:v)};
+assert.throws(()=>normalize(pinHintConflict),/Hint conflicts/);
 console.log('Phase 5 synthetic adapter boundary regression PASS');
