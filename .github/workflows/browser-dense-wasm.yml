@@ -1,0 +1,98 @@
+# Real browser comparison to a previously verified true WASM Node stress.
+# Reuses the proof-gated 9 MB offline HTML; NO expensive OR-Tools rebuild.
+# All participants/absences are synthetic. Mobile Chromium ≠ iPhone Safari.
+name: Dense 589-shift actual offline browser WASM benchmark
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/browser-dense-wasm.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+  actions: read
+jobs:
+  offline-dense:
+    runs-on: ubuntu-24.04
+    container:
+      image: mcr.microsoft.com/playwright/python:v1.58.0-noble
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Download actual previously Node-proven 589-month offline HTML
+        uses: actions/download-artifact@v4
+        with:
+          name: genuine-589-shift-cpsat-wasm-offline-demo
+          run-id: 44210728760
+          repository: ${{ github.repository }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          path: received/html
+      - name: Fetch previously proven six-case dense Node benchmark
+        uses: actions/download-artifact@v4
+        with:
+          name: verified-real-wasm-dense-589-benchmark
+          run-id: 44213148151
+          repository: ${{ github.repository }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          path: received/node
+      - name: Install matching browser Python client
+        run: python -m pip install --disable-pip-version-check playwright==1.58.0
+      - name: Verify original true WASM SHA and derive only fictional cases
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --version
+          node --check tests/wasm_dense_month_benchmark.cjs
+          node --check tests/audit_browser_dense_wasm.cjs
+          python -m py_compile tests/browser_dense_month_wasm.py
+          test "$(find received/html -name experimental_full_month_cp_sat.html | wc -l)" -eq 1
+          test "$(find received/node -name dense_589_wasm_results.json | wc -l)" -eq 1
+          html="$(find received/html -name experimental_full_month_cp_sat.html)"
+          old="$(find received/node -name dense_589_wasm_results.json)"
+          test -s "$html" && test -s "$old"
+          echo "PROVEN_MONTH_HTML=$html" >> "$GITHUB_ENV"
+          echo "PREVIOUS_NODE_BENCHMARK=$old" >> "$GITHUB_ENV"
+          mkdir -p proof
+          node tests/wasm_dense_month_benchmark.cjs --preflight
+          node tests/wasm_dense_month_benchmark.cjs \
+            --emit-browser-fixtures proof/synthetic_dense_browser_cases.json
+          python3 - <<'PY'
+          import json,os
+          from pathlib import Path
+          b=json.loads(Path(os.environ["PREVIOUS_NODE_BENCHMARK"]).read_text())
+          text=Path(os.environ["PROVEN_MONTH_HTML"]).read_text()
+          assert b["benchmark_executed"] is True
+          assert b["engine"]=="actual-OR-Tools-CP-SAT-in-Node-WASM"
+          assert len(b["results"])==6
+          assert all(x["status"]=="OPTIMAL" and
+            x["returned_schedule_independently_audited"] is True for x in b["results"])
+          assert b["wasm_sha256"] in text
+          assert text.count("真正 CP-SAT")>=1
+          print("The trusted browser HTML embeds exactly the WASM hash proved by dense Node stress.")
+          PY
+      - name: Actually solve six dense month models in OFFLINE desktop/mobile Chromium
+        shell: bash
+        run: |
+          set -euo pipefail
+          python tests/browser_dense_month_wasm.py \
+            "$PROVEN_MONTH_HTML" proof/synthetic_dense_browser_cases.json \
+            proof/browser_dense_raw.json
+      - name: Independently audit twelve actual browser WASM schedules
+        shell: bash
+        run: |
+          set -euo pipefail
+          node tests/audit_browser_dense_wasm.cjs \
+            proof/browser_dense_raw.json proof/browser_dense_audited.json
+      - name: Upload detailed real-browser evidence or failure traces
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: verified-real-chromium-offline-dense-wasm
+          path: |
+            proof/browser_dense_raw.json
+            proof/browser_dense_audited.json
+            dense-month-*-error.png
+          if-no-files-found: warn
