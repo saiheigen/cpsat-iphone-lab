@@ -123,7 +123,7 @@ function preflight(){
 }
 function browserFixtureManifest(){
  const scenarios=[{id:'tiny',name:'兩名虛構人員：四班艱苦哨最佳解',
-  source:toy(),targets:[2,2],expectedFill:4},
+  source:toy(),targets:[2,2],expectedFill:4,oracleBest:exactToyOracle(toy()).best},
   ...[['door','blackouts-no-hints'],
        ['officer','blackouts-no-hints'],
        ['door','forced-vacancies']].map(([pool,variant])=>{
@@ -132,11 +132,11 @@ function browserFixtureManifest(){
       source:s,targets:targetsFor(s),
       expectedFill:s.witness.filter(x=>x>=0).length};
   })];
- const cases=scenarios.map(({id,name,source,targets,expectedFill})=>({
+ const cases=scenarios.map(({id,name,source,targets,expectedFill,oracleBest})=>({
   id,name,year:source.year,month:source.month,pool:source.pool,
   shifts:source.shiftCount,staff:source.staff,
   mask:source.allowed,pins:source.pins,hints:source.hints,
-  targets,expectedFill,synthetic_only:true
+  targets,expectedFill,oracleBest:oracleBest??null,synthetic_only:true
  }));
  return {contract:'guard-month-harsh-v4',
   source:'synthetic-fixtures-no-real-workforce-data',cases};
