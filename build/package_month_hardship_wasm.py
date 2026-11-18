@@ -174,6 +174,7 @@ padding:13px;font-size:12px}small{display:block;color:#647586;overflow-wrap:anyw
 <label for="scenario">選擇已驗證的虛構情境</label>
 <select id="scenario"></select>
 <button id="run">在本機執行真正 WASM 三階段求解</button>
+<button id="reset-worker" type="button">重啟本機運算引擎並清空預覽</button>
 <p id="engine-mode" aria-live="polite">尚未選擇運算方式</p>
 <p id="status" role="status">尚未執行</p>
 <section id="summary" aria-live="polite">尚無排班摘要</section>
@@ -361,6 +362,7 @@ function independentlyAudit(t,res){
          hardship_optimal_proven:res.hardship_optimal_proven_given_locked_predecessors===true};
 }
 const btn=document.getElementById("run");
+const resetBtn=document.getElementById("reset-worker");
 const status=document.getElementById("status"),out=document.getElementById("output");
 const summary=document.getElementById("summary");
 const vacancyDetails=document.getElementById("vacancy-details");
@@ -390,13 +392,13 @@ let workerSeq=0,workerWasmSent=false;
 const pendingWorkerRequests=new Map();
 function disableWorker(err){
  if(solverWorker){try{solverWorker.terminate();}catch(_){}}
- solverWorker=null;workerInitialized=false;
+ solverWorker=null;workerInitialized=false;workerWasmSent=false;workerStartup=null;
  for(const [,entry] of pendingWorkerRequests)entry.reject(Error(String(err||"Worker ended")));
  pendingWorkerRequests.clear();
 }
 function prepareWorker(){
  if(workerStartup)return workerStartup;
- workerStartup=new Promise(resolve=>{
+ workerStartup=Promise.resolve().then(()=>new Promise(resolve=>{
   if(typeof Worker!=="function"||typeof Blob!=="function"||
       !URL||typeof URL.createObjectURL!=="function"){
    resolve(false);return;
@@ -416,6 +418,7 @@ function prepareWorker(){
    w=new Worker(url);
    solverWorker=w;
    w.onmessage=event=>{
+    if(solverWorker!==w)return;
     const data=event.data;
     if(!data||typeof data!=="object")return;
     if(data.type==="ready"){finish(true);return;}
@@ -423,15 +426,25 @@ function prepareWorker(){
     if(!entry)return;
     pendingWorkerRequests.delete(data.id);
     if(data.type==="result")entry.resolve(data.result);
-    else if(data.type==="error")entry.reject(Error(data.error||"Worker solver failed"));
+    else if(data.type==="error"){
+     entry.reject(Error(data.error||"Worker solver failed"));
+     disableWorker("Worker reported an error");
+    }
    };
    w.onerror=event=>{
     if(event&&typeof event.preventDefault==="function")event.preventDefault();
     if(!settled)finish(false);
     else disableWorker("Worker runtime error");
    };
+   w.onmessageerror=()=>{
+    if(!settled)finish(false);
+    else disableWorker("Worker message decoding error");
+   };
    timer=setTimeout(()=>finish(false),12000);
   }catch(_){finish(false);}
+ })).then(ready=>{
+  if(!ready)workerStartup=null;
+  return ready;
  });
  return workerStartup;
 }
@@ -447,12 +460,22 @@ async function solveWithMode(t){
    if(!WebAssembly.validate(bytes))throw Error("Worker WASM failed validation");
    payload.wasm=bytes.buffer;
    transfers.push(bytes.buffer);
-   workerWasmSent=true;
   }
   const result=await new Promise((resolve,reject)=>{
-   pendingWorkerRequests.set(id,{resolve,reject});
-   try{solverWorker.postMessage(payload,transfers);}
-   catch(err){pendingWorkerRequests.delete(id);reject(err);}
+   const watchdog=setTimeout(()=>{
+    if(pendingWorkerRequests.has(id))
+     disableWorker("Worker solve watchdog expired; result must not be used");
+   },90000);
+   pendingWorkerRequests.set(id,{
+    resolve:value=>{clearTimeout(watchdog);resolve(value);},
+    reject:err=>{clearTimeout(watchdog);reject(err);}
+   });
+   try{
+    solverWorker.postMessage(payload,transfers);
+    if(transfers.length)workerWasmSent=true;
+   }catch(err){
+    disableWorker("Worker message could not be sent");
+   }
   });
   return {got:result,executionMode:"dedicated-worker"};
  }
@@ -467,6 +490,20 @@ async function solveWithMode(t){
  return {got:JSON.parse(runtime.ccall("solve_guard_month_harsh_v4",
    "string",["string"],[frame])),executionMode:"main-thread-fallback"};
 }
+resetBtn.addEventListener("click",()=>{
+ if(btn.disabled)return;
+ disableWorker("User requested a clean Worker restart");
+ runtime=null;
+ acceptedSynthetic.clear();
+ clearCombinedView();updateCombinedReadiness();
+ summary.textContent="運算引擎已重啟；目前沒有可採用的已驗證班表";
+ status.textContent="已清空舊結果，請重新執行求解";
+ document.getElementById("engine-mode").textContent="背景 Worker 將在下次求解時重新建立";
+ out.textContent="沒有結果（引擎已重置）";
+ vacancyDetails.hidden=true;vacancyDetails.open=false;vacancyList.replaceChildren();
+ rosterDetails.hidden=true;rosterDetails.open=false;rosterDays.replaceChildren();
+ window.dispatchEvent(new Event("phase5-session-reset"));
+});
 select.addEventListener("change",()=>{
  clearCombinedView();updateCombinedReadiness();
  status.textContent="已切換情境，請重新執行求解";
@@ -480,7 +517,7 @@ btn.addEventListener("click",async()=>{
  const selected=select.value;
  if(combinedCases.includes(selected))acceptedSynthetic.delete(selected);
  updateCombinedReadiness();
- btn.disabled=true;select.disabled=true;combinedBtn.disabled=true;
+ btn.disabled=true;select.disabled=true;combinedBtn.disabled=true;resetBtn.disabled=true;
  status.textContent="正在本機執行三階段求解…";
  document.getElementById("engine-mode").textContent="正在初始化本機 Worker／WASM…";
  out.textContent="尚待獨立驗證";summary.textContent="正在計算，尚無已驗證班表";
@@ -559,7 +596,7 @@ btn.addEventListener("click",async()=>{
   vacancyDetails.hidden=true;vacancyDetails.open=false;vacancyList.replaceChildren();
  rosterDetails.hidden=true;rosterDetails.open=false;rosterDays.replaceChildren();
   out.textContent=String(err&&err.stack||err);
- }finally{btn.disabled=false;select.disabled=false;updateCombinedReadiness();}
+ }finally{btn.disabled=false;select.disabled=false;resetBtn.disabled=false;updateCombinedReadiness();}
 });
 combinedBtn.addEventListener("click",()=>{
  clearCombinedView();
