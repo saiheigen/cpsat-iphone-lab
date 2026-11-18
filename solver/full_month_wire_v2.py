@@ -245,8 +245,14 @@ def audit_full_month_v2_response(encoded: dict, result: dict) -> dict:
         "assignments": assignments,
         "filled": filled,
         "missing": missing,
-        "max_fill_proven_for_partial_model": status == "OPTIMAL" or missing == 0,
-        "source": "WASM_RESPONSE_INDEPENDENTLY_AUDITED",
+        # External JSON can claim OPTIMAL without actually being from
+        # CP-SAT. Re-auditing proves FEASIBILITY, not best-possible filling.
+        # The ONLY optimality proof available here without a trusted solver
+        # execution transcript is the trivial bound: every shift filled.
+        "max_fill_proven_for_partial_model": missing == 0,
+        "solver_reported_optimal": status == "OPTIMAL",
+        "actual_wasm_execution_proven": False,
+        "source": "MODEL_RESPONSE_INDEPENDENTLY_AUDITED_NOT_RUNTIME_PROOF",
         "validated_against_original_rules": True,
         "fairness_optimized": False,
         "full_operational_rules_verified": False,
