@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-"""Actual offline Chromium three-stage hardship OR-Tools WebAssembly acceptance.
+"""Actual offline Chromium/WebKit three-stage hardship OR-Tools WASM acceptance.
 
-This tests a REAL solver inside desktop and mobile-sized Linux Chromium.
-It DOES NOT prove iPhone Safari, production duty rules or hardship fairness.
+This tests a REAL solver in Linux desktop and mobile-sized browser engines.
+Linux WebKit and Chromium are NOT a physical iPhone Safari or operational approval.
 Any fake HTML containing only JavaScript results cannot satisfy the expected
 page and runtime provenance without also passing Node proof + checksums.
 """
@@ -21,8 +21,8 @@ CASES = {
 }
 
 
-def run(browser, html: Path, mobile: bool):
-    name="mobile-chromium-emulation" if mobile else "desktop-chromium"
+def run(browser, html: Path, mobile: bool, engine: str = "chromium"):
+    name=("mobile-"+engine+"-emulation" if mobile else "desktop-"+engine)
     ctx=browser.new_context(
         viewport={"width":390,"height":844} if mobile else
                  {"width":1280,"height":800},
@@ -36,7 +36,8 @@ def run(browser, html: Path, mobile: bool):
                 ("http://","https://")) else None)
     page.on("pageerror",lambda err:errors.append(str(err)))
     started=time.monotonic()
-    record={"profile":name,"real_iphone_safari":False,
+    record={"profile":name,"engine":engine,"browser_version":browser.version,
+            "physical_iphone":False,"real_iphone_safari":False,
             "offline":True,"cases":[]}
     try:
         page.goto(html.resolve().as_uri(),wait_until="domcontentloaded",
@@ -218,29 +219,39 @@ def run(browser, html: Path, mobile: bool):
 def main():
     parser=argparse.ArgumentParser()
     parser.add_argument("html",type=Path)
+    parser.add_argument("--browser",choices=("chromium","webkit"),default="chromium",
+                        help="WebKit is a Linux engine check, not physical iPhone Safari")
     args=parser.parse_args()
     if not args.html.is_file() or args.html.stat().st_size<100000:
         raise SystemExit("Genuine full-month night/noon/long-shift hardship WASM HTML missing or too small")
     with sync_playwright() as p:
-        browser=p.chromium.launch(headless=True,args=["--no-sandbox"])
+        browser=(p.chromium.launch(headless=True,args=["--no-sandbox"])
+                 if args.browser=="chromium" else
+                 p.webkit.launch(headless=True))
         try:
-            runs=[run(browser,args.html,False),run(browser,args.html,True)]
+            runs=[run(browser,args.html,False,args.browser),
+                  run(browser,args.html,True,args.browser)]
         finally:
             browser.close()
     report={
         "accepted":all(x["accepted"] for x in runs),
-        "real_offline_chromium_executed":True,
+        "browser_engine":args.browser,
+        "linux_engine_only":True,
+        "real_offline_chromium_executed":args.browser=="chromium",
+        "real_offline_webkit_executed":args.browser=="webkit",
         "real_iphone_safari_verified":False,
         "complete_operational_roster_verified":False,
         "objective":"legal_fill_then_count_L1_then_locked_hardship_weighted_L1",
         "runs":runs
     }
-    Path("hardship_month_browser_proof.json").write_text(
+    report_path=("hardship_month_browser_proof.json" if args.browser=="chromium"
+                 else "hardship_month_webkit_proof.json")
+    Path(report_path).write_text(
         json.dumps(report,ensure_ascii=False,indent=2)+"\n",
         encoding="utf-8")
     print(json.dumps(report,ensure_ascii=False,indent=2))
     if not report["accepted"]:
-        raise SystemExit("Real offline Chromium hardship WASM acceptance FAILED")
+        raise SystemExit("Real offline "+args.browser+" hardship WASM acceptance FAILED")
 
 
 if __name__=="__main__":
