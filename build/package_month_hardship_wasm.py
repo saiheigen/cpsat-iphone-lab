@@ -391,12 +391,16 @@ function updateCombinedReadiness(){
 }
 let runtime=null,solverWorker=null,workerStartup=null,workerInitialized=false;
 let workerSeq=0,workerWasmSent=false,solveGeneration=0;
+let pendingStartupFinish=null;
 const pendingWorkerRequests=new Map();
 function disableWorker(err){
+ const abortStartup=pendingStartupFinish;
+ pendingStartupFinish=null;
  if(solverWorker){try{solverWorker.terminate();}catch(_){}}
  solverWorker=null;workerInitialized=false;workerWasmSent=false;workerStartup=null;
  for(const [,entry] of pendingWorkerRequests)entry.reject(Error(String(err||"Worker ended")));
  pendingWorkerRequests.clear();
+ if(abortStartup)abortStartup(false);
 }
 function prepareWorker(){
  if(workerStartup)return workerStartup;
@@ -408,11 +412,14 @@ function prepareWorker(){
   let w=null,url=null,timer=null,settled=false;
   function finish(ready){
    if(settled)return;
-   settled=true;if(timer!==null)clearTimeout(timer);
+   settled=true;
+   if(pendingStartupFinish===finish)pendingStartupFinish=null;
+   if(timer!==null)clearTimeout(timer);
    if(url)URL.revokeObjectURL(url);
    if(!ready)disableWorker("Worker startup unavailable");
    workerInitialized=ready;resolve(ready);
   }
+  pendingStartupFinish=finish;
   try{
    const glue=document.getElementById("phase5-wasm-glue").textContent;
    url=URL.createObjectURL(new Blob([glue,"\n",WORKER_BOOTSTRAP],
