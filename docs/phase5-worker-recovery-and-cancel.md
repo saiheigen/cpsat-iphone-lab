@@ -24,3 +24,12 @@ Scope: the single-file **fictional** genuine CP-SAT WebAssembly experiment. This
 - No real military names, duty information or eligibility masks are introduced. No external HTTP/HTTPS connections are permitted.
 
 Keep evidence links scoped to the exact committed CI run. **A GitHub Actions run only counts as passed when completed with conclusion success.** Do not claim physical iPhone Safari or real-device memory behavior without separately observed real-device test results.
+
+## Completed evidence — 2026-11-18
+
+- [Chromium real-WASM browser CI #44257072735](https://github.com/saiheigen/cpsat-iphone-lab/actions/runs/44257072735): **completed / success**. Desktop and mobile-sized emulation both passed the real solver, combined fictional schedule, explicit engine restart, simulated Worker error, fresh-worker recovery, cancellation of a long synthetic run, and another genuine tiny CP-SAT solve. Both records had `fault_injected=true`, `cancelled_real_long_job=true`, `stale_result_rejected=true`, `subsequent_genuine_worker_solve_passed=true`.
+- [Linux WebKit dual-policy CI #44257072838](https://github.com/saiheigen/cpsat-iphone-lab/actions/runs/44257072838): **completed / success**. Four profile/policy combinations exercised Worker restart. The **two zero-external-egress profiles** verified genuine dedicated-worker error injection and cancellation/recovery (2/2). The **two Playwright forced-offline main-thread fallback profiles** verified restart but **did not claim preemptive cancellation**. Every result remains synthetic, and actual iPhone Safari has not been tested.
+- [Genuine C++ WASM adapter integration #44256772292](https://github.com/saiheigen/cpsat-iphone-lab/actions/runs/44256772292) and [synthetic boundary regression #44256772223](https://github.com/saiheigen/cpsat-iphone-lab/actions/runs/44256772223): **completed / success**.
+- The Chromium UI artifact ZIP and directly extracted `experimental_full_month_hardship_cp_sat.html` are available from the successful Chromium workflow's artifact. No operational duty data was used.
+
+**Limits:** The 90-second timeout is a policy of this test UI, not a maximum on every phone. Repeated Worker resets and synthetic runs do not establish long-term iPhone memory stability. Full v7 cross-month/leave/inspection/vehicle/roster approval remains unimplemented or unverified; no official duty schedule is certified.
