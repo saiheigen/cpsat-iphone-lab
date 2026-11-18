@@ -326,12 +326,12 @@ select.addEventListener("change",()=>{
  status.textContent="已切換情境，請重新執行求解";
  summary.textContent="尚無這個情境的已驗證結果";
  out.textContent="沒有這個情境的求解結果";
- vacancyDetails.hidden=true;vacancyList.replaceChildren();
+ vacancyDetails.hidden=true;vacancyDetails.open=false;vacancyList.replaceChildren();
 });
 btn.addEventListener("click",async()=>{
  btn.disabled=true;status.textContent="正在本機執行三階段求解…";
  out.textContent="尚待獨立驗證";summary.textContent="正在計算，尚無已驗證班表";
- vacancyDetails.hidden=true;vacancyList.replaceChildren();
+ vacancyDetails.hidden=true;vacancyDetails.open=false;vacancyList.replaceChildren();
  await new Promise(ok=>requestAnimationFrame(ok));
  const start=Date.now();
  try{
@@ -364,7 +364,7 @@ btn.addEventListener("click",async()=>{
    li.textContent=day+"日："+slots.join("、");
    vacancyList.appendChild(li);
   }
-  vacancyDetails.hidden=vacancies.length===0;
+  vacancyDetails.open=false;vacancyDetails.hidden=vacancies.length===0;
   status.textContent="✅ 真正 WASM 三階段合法填班與艱苦公平檢查通過";
   out.textContent=JSON.stringify({accepted:true,scenario:t.id,
    status:got.status,shifts:t.shifts,staff:t.staff,
@@ -384,7 +384,7 @@ btn.addEventListener("click",async()=>{
  }catch(err){
   status.textContent="❌ 本機三階段求解／獨立驗證失敗";
   summary.textContent="未產生可驗證班表，禁止採用結果";
-  vacancyDetails.hidden=true;vacancyList.replaceChildren();
+  vacancyDetails.hidden=true;vacancyDetails.open=false;vacancyList.replaceChildren();
   out.textContent=String(err&&err.stack||err);
  }finally{btn.disabled=false;}
 });
