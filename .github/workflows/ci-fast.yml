@@ -45,6 +45,7 @@ jobs:
           node --check tests/contract_real_wasm_smoke.cjs
           node --check integration/fictional_genuine_wasm_runner.cjs
           node --check src/fictional_iphone_e2e_ui.js
+          node --check tests/real_fictional_whatif_wasm.cjs
           node tests/test_fictional_iphone_e2e_ui.cjs
           node tests/phase5_synthetic_adapter.test.cjs
           node tests/phase5_v7_preview.test.cjs

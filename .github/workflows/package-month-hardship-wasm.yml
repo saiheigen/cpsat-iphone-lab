@@ -98,6 +98,11 @@ jobs:
             proof/fictional_local_e2e_summary.json \
             dist/iphone_fictional_crossmonth_e2e.html
           test -s dist/iphone_fictional_crossmonth_e2e.html
+          node tests/real_fictional_whatif_wasm.cjs \
+            "$HARDSHIP_WASM_JS" "$HARDSHIP_WASM_BIN" \
+            proof/real_hardship_node_proof.json \
+            dist/iphone_fictional_crossmonth_e2e.html \
+            proof/real_fictional_whatif_wasm_smoke.json
       - name: Upload proof-gated real three-stage hardship WASM standalone page
         uses: actions/upload-artifact@v4
         with:
@@ -108,4 +113,5 @@ jobs:
             proof/synthetic_hardship_browser_cases.json
             dist/iphone_fictional_crossmonth_e2e.html
             proof/fictional_local_e2e_summary.json
+            proof/real_fictional_whatif_wasm_smoke.json
           if-no-files-found: error

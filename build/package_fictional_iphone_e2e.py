@@ -107,7 +107,27 @@ def make(base_html: Path, proof_json: Path, local_report: Path,
     panel='''<section id="fictional-e2e-workspace" hidden aria-label="跨月虛構整合測試">
 <h2>📱 一鍵跨月虛構整合驗收</h2>
 <p class="notice">此區只執行內建虛構大門＋安官資料。真正 WASM 在本機求解，手機端再次核對候選資格與休息規則；前月封存與事件的獨立稽核是在產生此頁時完成，並非手機即時重新驗證。不是正式排班。</p>
-<button id="fictional-e2e-start" type="button">一鍵執行兩組真正 WASM 求解</button>
+<details id="fictional-edit-workspace">
+<summary>🧪 本機模擬調整：額外禁排與固定空班</summary>
+<p>僅可縮減既有虛構候選資格，不得解除原本禁排，也不得變更人工固定班。
+修改不會儲存、上傳或改變已核對的原始封存；重新開啟頁面即清空。</p>
+<label for="fictional-edit-pool">勤務別</label>
+<select id="fictional-edit-pool"><option value="door">大門衛哨</option><option value="officer">安全士官</option></select>
+<label for="fictional-edit-day">日期</label><select id="fictional-edit-day"></select>
+<label for="fictional-edit-slot">班次</label><select id="fictional-edit-slot"></select>
+<label for="fictional-edit-action">模擬操作</label>
+<select id="fictional-edit-action"><option value="block">額外禁排一名虛構候選</option><option value="vacancy">指定此班固定空缺</option></select>
+<label for="fictional-edit-person">只顯示原本有資格的虛構人員</label>
+<select id="fictional-edit-person"></select>
+<button id="fictional-edit-preset" type="button">套用示範：10 項禁排，觀察填班變化</button>
+<button id="fictional-edit-apply" type="button">新增這項模擬禁排</button>
+<button id="fictional-edit-undo" type="button" disabled>撤銷上一項</button>
+<button id="fictional-edit-clear" type="button" disabled>全部還原虛構預設資料</button>
+<p id="fictional-edit-status" role="status" aria-live="polite">尚未加入模擬限制</p>
+<p id="fictional-edit-summary" aria-live="polite">只顯示既有虛構候選，沒有真實資料。</p>
+<ol id="fictional-edit-list"></ol>
+</details>
+<button id="fictional-e2e-start" type="button">一鍵求解目前的虛構條件（兩組 WASM）</button>
 <p id="fictional-e2e-status" role="status" aria-live="polite">尚未執行</p>
 <p id="fictional-e2e-counts">尚無已完成的雙勤務結果</p>
 <details id="fictional-e2e-preview" hidden><summary>查看每日虛構班表與缺班原因</summary>
@@ -122,6 +142,9 @@ def make(base_html: Path, proof_json: Path, local_report: Path,
 '''
     style='''\n#fictional-e2e-workspace{margin:24px 0;border-top:2px solid #b7ccd6;padding-top:16px}
 #fictional-e2e-workspace h2{font-size:19px}#fictional-e2e-day-rows li{margin:5px 0}
+#fictional-edit-workspace{margin:12px 0 20px}#fictional-edit-workspace label{margin:9px 0 4px}
+#fictional-edit-workspace button{margin-top:9px}#fictional-edit-list li{font-size:14px;line-height:1.5}
+#fictional-edit-summary{font-size:14px;color:#415468}
 '''
     if html.count('</style>')!=1:
         raise ValueError('Unexpected base CSS')

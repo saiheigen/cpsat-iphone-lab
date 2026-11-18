@@ -11,6 +11,9 @@ function makeFixture(pool){
  const fixed=pool==='door'?(7-1)*12+6-1:(5-1)*7+5-1;
  const blank=pool==='door'?(5-1)*12+8-1:(6-1)*7+4-1;
  pins[blank]=-1;pins[fixed]=48;assigned[fixed]=48;mask[fixed*staff+48]='1';
+ if(pool==='door')for(const slot of [1,2,3,4,5,7,8,9,10,11,12]){
+  const i=(7-1)*12+slot-1;mask[i*staff+48]='1';
+ }
  if(pool==='door'){
   for(const [day,slot,p] of [[1,5,0],[4,9,1]]){
    const index=(day-1)*slots+slot-1;mask[index*staff+p]='1';assigned[index]=p;
@@ -35,7 +38,7 @@ const spec={synthetic_only:true,operationally_certified:false,month:'2026-12',so
 const js=fs.readFileSync(path.join(__dirname,'../src/fictional_iphone_e2e_ui.js'),'utf8').replace('__FICTIONAL_E2E_SPEC__',JSON.stringify(spec));
 function setup(solve){
  class Element{
-  constructor(id){this.id=id;this.disabled=false;this.hidden=true;this.open=false;this.textContent='';this.value=id==='fictional-e2e-day'?'1':id==='fictional-e2e-pool'?'door':'';this.handlers={};this.children=[];}
+  constructor(id){this.id=id;this.disabled=false;this.hidden=true;this.open=false;this.textContent='';this.value=({ 'fictional-e2e-day':'1', 'fictional-e2e-pool':'door', 'fictional-edit-pool':'door', 'fictional-edit-day':'7', 'fictional-edit-slot':'1', 'fictional-edit-action':'block', 'fictional-edit-person':'48' })[id]||'';this.handlers={};this.children=[];}
   addEventListener(k,fn){this.handlers[k]=fn;}
   appendChild(n){this.children.push(n);}
   replaceChildren(){this.children=[];}
@@ -80,5 +83,63 @@ function setup(solve){
  await forged.get('fictional-e2e-start').handlers.click();
  assert.equal(forged.get('fictional-e2e-preview').hidden,true);
  assert.match(forged.get('fictional-e2e-status').textContent,/^❌/);
- console.log('Synthetic iPhone UI: success, reset, UNKNOWN rejection, forged-count rejection PASS');
+ // Simulated solver only for UI logic: re-evaluate the sealed mask after local edits.
+ function mockSolve(t){
+  const base=results[t.pool];
+  const assignments=base.assignments.map((p,i)=>p>=0&&
+    (t.pins[i]===-1||t.mask[i*t.staff+p]!=="1")?-1:p);
+  const filled=assignments.filter(x=>x>=0).length;
+  return {got:{status:'FEASIBLE',assignments,filled,missing:t.shifts-filled},
+     executionMode:'dedicated-worker'};
+ }
+ const editor=setup(async t=>mockSolve(t));
+ await editor.get('fictional-e2e-start').handlers.click();
+ assert.equal(editor.get('fictional-e2e-preview').hidden,false);
+ const pool=editor.get('fictional-edit-pool');pool.value='door';
+ const day=editor.get('fictional-edit-day');day.value='1';day.handlers.change();
+ const slot=editor.get('fictional-edit-slot');slot.value='5';slot.handlers.change();
+ editor.get('fictional-edit-action').value='block';
+ editor.get('fictional-edit-person').value='0';
+ editor.get('fictional-edit-apply').handlers.click();
+ assert.equal(editor.get('fictional-e2e-preview').hidden,true,'Edits revoke stale solution');
+ assert.equal(editor.get('fictional-edit-list').children.length,1);
+ assert.match(editor.get('fictional-edit-status').textContent,/^✅/);
+ await editor.get('fictional-e2e-start').handlers.click();
+ assert.match(editor.get('fictional-e2e-status').textContent,/^✅/);
+ assert.match(editor.get('fictional-e2e-counts').textContent,/總計已填 3，缺班 586/);
+ const editedReport=JSON.parse(editor.get('fictional-e2e-report').textContent);
+ assert.equal(editedReport.whatif_edits,1);
+ assert.equal(editedReport.operationally_certified,false);
+ assert.equal(editedReport.edited_source_original_crossmonth_reaudited_on_device,false);
+ // Pinned duty cannot be overwritten, even after an accepted result.
+ day.value='7';day.handlers.change();slot.value='6';slot.handlers.change();
+ editor.get('fictional-edit-person').value='48';
+ assert.equal(editor.get('fictional-edit-apply').disabled,true);
+ editor.get('fictional-edit-apply').handlers.click();
+ assert.equal(editor.get('fictional-edit-list').children.length,1);
+ assert.match(editor.get('fictional-edit-status').textContent,/^❌/);
+ editor.get('fictional-edit-undo').handlers.click();
+ assert.equal(editor.get('fictional-edit-list').children.length,0);
+ assert.equal(editor.get('fictional-e2e-preview').hidden,true);
+ await editor.get('fictional-e2e-start').handlers.click();
+ assert.match(editor.get('fictional-e2e-counts').textContent,/缺班 585/);
+ day.value='1';day.handlers.change();slot.value='5';slot.handlers.change();
+ editor.get('fictional-edit-action').value='vacancy';editor.get('fictional-edit-action').handlers.change();
+ editor.get('fictional-edit-apply').handlers.click();
+ assert.equal(editor.get('fictional-edit-list').children.length,1);
+ await editor.get('fictional-e2e-start').handlers.click();
+ assert.match(editor.get('fictional-e2e-counts').textContent,/缺班 586/);
+ editor.get('fictional-edit-clear').handlers.click();
+ assert.equal(editor.get('fictional-edit-list').children.length,0);
+ assert.equal(editor.get('fictional-e2e-preview').hidden,true);
+ editor.reset();
+ assert.equal(editor.get('fictional-e2e-preview').hidden,true);
+ editor.get('fictional-edit-preset').handlers.click();
+ assert.equal(editor.get('fictional-edit-list').children.length,10);
+ assert.equal(editor.get('fictional-edit-preset').disabled,true);
+ await editor.get('fictional-e2e-start').handlers.click();
+ assert.match(editor.get('fictional-e2e-status').textContent,/^✅/);
+ editor.get('fictional-edit-clear').handlers.click();
+ assert.equal(editor.get('fictional-edit-list').children.length,0);
+ console.log('Synthetic iPhone UI: baseline, UNKNOWN, forgery, edit, pin, undo, vacancy and reset PASS');
 })().catch(e=>{console.error(e);process.exitCode=1;});
