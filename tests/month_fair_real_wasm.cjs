@@ -154,6 +154,34 @@ async function main(){
  fs.writeFileSync(outfile,JSON.stringify(proof,null,2)+'\n');
  console.log(JSON.stringify(proof,null,2));
 }
-if(require.main===module)main().catch(e=>{
- console.error('GENUINE FAIRNESS WASM FAILED:',e);process.exitCode=1;});
+if(require.main===module){
+ if(process.argv[2]==='--emit-browser-fixtures'){
+  const file=process.argv[3];
+  if(!file)throw Error('Missing synthetic fixture filename');
+  const fixtures=[{id:'tiny',name:'兩名虛構人員：兩班最佳公平',
+    scenario:tiny(),goals:[1,1],expectedFill:2},
+   ...[['door','blackouts-no-hints'],
+       ['officer','blackouts-no-hints'],
+       ['door','forced-vacancies']].map(([pool,variant])=>{
+    const t=createScenario(pool,variant);
+    return {id:pool+'-'+variant,name:pool+'/'+variant,
+      scenario:t,goals:targetsFor(t),
+      expectedFill:t.witness.filter(x=>x>=0).length};
+   })];
+  const out=fixtures.map(x=>({
+    id:x.id,name:x.name,year:x.scenario.year,month:x.scenario.month,
+    pool:x.scenario.pool,shifts:x.scenario.shiftCount,staff:x.scenario.staff,
+    mask:x.scenario.allowed,pins:x.scenario.pins,hints:x.scenario.hints,
+    targets:x.goals,expectedFill:x.expectedFill,
+    synthetic_only:true
+  }));
+  fs.writeFileSync(file,JSON.stringify({contract:'guard-month-fair-v3',
+   source:'synthetic-fixtures-no-real-workforce-data',
+   cases:out},null,2)+'\n');
+  console.log('Exported '+out.length+' synthetic real WASM browser cases');
+ }else{
+  main().catch(e=>{console.error('GENUINE FAIRNESS WASM FAILED:',e);
+   process.exitCode=1;});
+ }
+}
 module.exports={wire,score,targetsFor,tiny};
