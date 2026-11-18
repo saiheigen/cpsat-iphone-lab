@@ -78,6 +78,26 @@ jobs:
             proof/synthetic_hardship_browser_cases.json \
             dist/experimental_full_month_hardship_cp_sat.html
           test -s dist/experimental_full_month_hardship_cp_sat.html
+      - name: Produce additional one-click fictional cross-month iPhone offline page
+        shell: bash
+        run: |
+          set -euo pipefail
+          original="$(find received -type f -name full_month_hardship_wasm_proof.json)"
+          test -s "$original"
+          digest="$(python3 -c 'import json,sys;print(json.load(open(sys.argv[1]))["wasm_sha256"])' "$original")"
+          python3 -m unittest discover -s tests -p 'test_package_fictional_iphone_e2e.py' -q
+          node tests/test_fictional_iphone_e2e_ui.cjs
+          python3 -m tools.fictional_offline_pipeline \
+            --wasm-js "$HARDSHIP_WASM_JS" --wasm-bin "$HARDSHIP_WASM_BIN" \
+            --proof proof/real_hardship_node_proof.json \
+            --trusted-wasm-sha256 "$digest" \
+            --output proof/fictional_local_e2e_summary.json
+          python3 build/package_fictional_iphone_e2e.py \
+            dist/experimental_full_month_hardship_cp_sat.html \
+            proof/real_hardship_node_proof.json \
+            proof/fictional_local_e2e_summary.json \
+            dist/iphone_fictional_crossmonth_e2e.html
+          test -s dist/iphone_fictional_crossmonth_e2e.html
       - name: Upload proof-gated real three-stage hardship WASM standalone page
         uses: actions/upload-artifact@v4
         with:
@@ -86,4 +106,6 @@ jobs:
             dist/experimental_full_month_hardship_cp_sat.html
             proof/real_hardship_node_proof.json
             proof/synthetic_hardship_browser_cases.json
+            dist/iphone_fictional_crossmonth_e2e.html
+            proof/fictional_local_e2e_summary.json
           if-no-files-found: error
