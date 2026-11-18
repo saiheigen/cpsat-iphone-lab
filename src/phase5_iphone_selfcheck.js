@@ -50,6 +50,15 @@ function capture(){
   Object.keys(outcomes).length+" / 4 情境已記錄"+
   (combined?"；589 班合併預覽已記錄":"");
 }
+window.addEventListener("phase5-session-reset",()=>{
+ for(const name of Object.keys(outcomes))delete outcomes[name];
+ combined=null;probe=null;maxGap=0;ticks=0;
+ lastTick=performance.now();
+ $("phone-evidence-json").value="";
+ $("phone-evidence-status").textContent="引擎已重啟，舊紀錄已清空。請重新執行虛構情境。";
+ $("phone-probe-status").textContent="尚未在新引擎狀態下自檢";
+ capture();
+});
 new MutationObserver(capture).observe($("output"),{childList:true,characterData:true,subtree:true});
 new MutationObserver(capture).observe($("combined-output"),{childList:true,characterData:true,subtree:true});
 function wasmTinyValid(){
