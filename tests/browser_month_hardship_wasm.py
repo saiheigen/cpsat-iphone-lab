@@ -255,6 +255,60 @@ def run(browser, html: Path, mobile: bool, engine: str = "chromium",
             "accepted":True,"rows":combined["rows"],"filled":combined["filled"],
             "missing":combined["missing"],"importable_as_v7_backup":False
         }
+        # Physical-device reporting stays fail-closed even when the test
+        # deliberately selects "iPhone Safari" on desktop Linux.
+        page.locator("#phone-selfcheck summary").click()
+        if "4 / 4" not in page.locator("#phone-record-count").inner_text():
+            raise AssertionError("Synthetic session results were not collected")
+        page.locator("#phone-worker-probe").click()
+        page.wait_for_function(
+            "() => !document.getElementById('phone-worker-probe').disabled",
+            timeout=12000)
+        page.locator("#phone-open-method").select_option("physical-safari")
+        page.locator("#phone-network-mode").select_option("all-radios-off")
+        page.locator("#phone-is-physical").check()
+        page.locator("#phone-generate-evidence").click()
+        phone=json.loads(page.locator("#phone-evidence-json").input_value())
+        if phone.get("format")!="phase5-synthetic-iphone-selfcheck-v1":
+            raise AssertionError("Wrong iPhone evidence protocol")
+        if phone.get("browser_identity_independently_verified") is not False:
+            raise AssertionError("Browser identity fabricated")
+        if phone.get("physical_iphone_safari_verified") is not False:
+            raise AssertionError("Falsely approved a simulated iPhone")
+        if phone.get("operationally_certified") is not False:
+            raise AssertionError("Falsely approved operational use")
+        if phone.get("manual_physical_iphone_confirmation") is not True:
+            raise AssertionError("Missing explicit user confirmation provenance")
+        if phone.get("manually_selected_open_method")!="physical-safari":
+            raise AssertionError("Manual browser selection lost")
+        if phone.get("manually_selected_network_state")!="all-radios-off":
+            raise AssertionError("Manual network selection lost")
+        cases=phone.get("synthetic_cases")
+        if (not isinstance(cases,list) or len(cases)!=4 or
+                {x.get("scenario") for x in cases}!=set(CASES)):
+            raise AssertionError("Missing synthetic session records")
+        if phone.get("all_four_cases_observed") is not True:
+            raise AssertionError("Incomplete scenario evidence falsely accepted")
+        combined=phone.get("synthetic_combined_preview")
+        if (not isinstance(combined,dict) or combined.get("rows")!=589 or
+                combined.get("filled")!=577 or combined.get("missing")!=12 or
+                combined.get("importable_as_v7_backup") is not False):
+            raise AssertionError("Phone report lost 589-row fictitious preview")
+        probe=phone.get("worker_probe")
+        if not isinstance(probe,dict) or probe.get("wasm_validate") is not True:
+            raise AssertionError("Basic WASM self-test absent")
+        if (engine=="chromium" or network_policy=="deny-external") and probe.get("status")!="ready":
+            raise AssertionError("Actual Worker self-test failed")
+        if phone.get("unhandled_script_errors_observed")!=0:
+            raise AssertionError("Unhandled script error during phone self-check")
+        if "assignments" in json.dumps(phone):
+            raise AssertionError("Phone handoff exported raw roster assignments")
+        record["iphone_selfcheck"]={
+            "accepted":True,"synthetic_case_count":len(cases),
+            "manual_identity_cannot_certify_device":True,
+            "worker_probe":probe.get("status"),
+            "measured_heartbeat_gap_ms":phone["observed_main_thread_max_gap_ms"]
+        }
         if network:
             raise AssertionError("Page sent external HTTP request: "+str(network))
         if errors:
