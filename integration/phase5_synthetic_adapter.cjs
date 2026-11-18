@@ -1,5 +1,6 @@
 'use strict';
 // Synthetic-only boundary. Never send operational personnel or eligibility records here.
+const {independentlyAudit}=require('../tests/month_real_wasm.cjs');
 function assert(cond,msg){if(!cond)throw Error(msg);}
 function normalize(input){
  assert(input&&input.synthetic_only===true,'Synthetic-only input required');
@@ -38,6 +39,9 @@ function project(input,result){
  });
  const filled=shifts.filter(x=>!x.unfilled).length;
  assert(result.filled===filled&&result.missing===input.shifts-filled,'Incorrect fill counts');
+ independentlyAudit({year:input.year,month:input.month,pool:input.pool,
+  staff:input.staff,shiftCount:input.shifts,allowed:input.mask,
+  pins:input.pins,hints:input.hints},result);
  return {synthetic_only:true,contract:input.contract,status:result.status,
   filled,missing:input.shifts-filled,shifts};
 }
