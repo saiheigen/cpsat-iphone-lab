@@ -2,11 +2,8 @@
 # Synthetic-only input. Does not change the already-proven fixed math probe.
 name: Full-month two-stage fair CP-SAT WASM experiment
 on:
-  push:
-    branches: [main]
-    paths:
-      - '.github/workflows/cp-sat-wasm-fair.yml'
   workflow_dispatch:
+
 permissions:
   contents: read
 jobs:

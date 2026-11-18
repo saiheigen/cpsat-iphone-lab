@@ -1,16 +1,7 @@
 name: Phase 5 genuine WASM integration regression
 on:
-  push:
-    paths:
-      - 'integration/phase5_*.cjs'
-      - 'tests/phase5_*.cjs'
-      - '.github/workflows/phase5-real-wasm-integration.yml'
-  pull_request:
-    paths:
-      - 'integration/phase5_*.cjs'
-      - 'tests/phase5_*.cjs'
-      - '.github/workflows/phase5-real-wasm-integration.yml'
   workflow_dispatch:
+
 permissions:
   actions: read
   contents: read

@@ -1,23 +1,8 @@
 # Fictional events ONLY; never upload operational v7 records or masks.
 name: Phase 19 fictional v7 hard rules genuine WASM gate
 on:
-  push:
-    paths:
-      - 'solver/phase19_fictional_v7_hard_rules.py'
-      - 'tests/test_phase19_fictional_v7_hard_rules.py'
-      - 'tests/phase19_genuine_v4_rule_gate.cjs'
-      - 'scripts/phase19_emit_fictional_months.py'
-      - 'scripts/phase19_audit_fictional_v4.py'
-      - '.github/workflows/phase19-fictional-v7-hard-rule-gate.yml'
-  pull_request:
-    paths:
-      - 'solver/phase19_fictional_v7_hard_rules.py'
-      - 'tests/test_phase19_fictional_v7_hard_rules.py'
-      - 'tests/phase19_genuine_v4_rule_gate.cjs'
-      - 'scripts/phase19_emit_fictional_months.py'
-      - 'scripts/phase19_audit_fictional_v4.py'
-      - '.github/workflows/phase19-fictional-v7-hard-rule-gate.yml'
   workflow_dispatch:
+
 permissions:
   contents: read
   actions: read

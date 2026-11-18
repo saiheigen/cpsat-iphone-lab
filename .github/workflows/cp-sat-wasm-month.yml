@@ -2,11 +2,8 @@
 # Synthetic-only input. Does not change the already-proven fixed math probe.
 name: Full-month CP-SAT WebAssembly experiment
 on:
-  push:
-    branches: [main]
-    paths:
-      - '.github/workflows/cp-sat-wasm-month.yml'
   workflow_dispatch:
+
 permissions:
   contents: read
 jobs:

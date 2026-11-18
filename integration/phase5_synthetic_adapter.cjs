@@ -1,6 +1,6 @@
 'use strict';
 // Synthetic-only boundary. Never send operational personnel or eligibility records here.
-const {independentlyAudit}=require('../tests/month_real_wasm.cjs');
+const {independentlyAudit}=require('./month_audit.cjs');
 function assert(cond,msg){if(!cond)throw Error(msg);}
 function normalize(input){
  assert(input&&input.synthetic_only===true,'Synthetic-only input required');
@@ -11,7 +11,7 @@ function normalize(input){
  assert(Number.isInteger(input.year)&&input.year>=2020&&input.year<=2100&&
  Number.isInteger(input.month)&&input.month>=1&&input.month<=12,'Invalid month');
  assert(input.shifts===days*slots,'Incomplete calendar');
- assert(Number.isInteger(input.staff)&&input.staff>0&&input.staff<=100,'Invalid staff count');
+ assert(Number.isInteger(input.staff)&&input.staff>0&&input.staff<=106,'Invalid staff count');
  assert(typeof input.mask==='string'&&input.mask.length===input.shifts*input.staff&&
  /^[01]+$/.test(input.mask),'Invalid eligibility mask');
  assert(Array.isArray(input.pins)&&input.pins.length===input.shifts,'Invalid pins');

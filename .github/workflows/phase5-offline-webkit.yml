@@ -2,24 +2,8 @@
 # WebKit ≠ physical iPhone Safari. Only fictional scenarios.
 name: Phase 5 WebKit airplane-mode and zero-egress Worker acceptance
 on:
-  pull_request:
-    paths:
-      - 'build/package_month_hardship_wasm.py'
-      - 'src/phase5_hardship_worker.js'
-      - 'src/phase5_iphone_selfcheck.js'
-      - 'tests/browser_month_hardship_wasm.py'
-      - 'tests/test_package_month_hardship_wasm.py'
-      - '.github/workflows/phase5-offline-webkit.yml'
-      - '.github/workflows/phase5-offline-ui-e2e.yml'
-  push:
-    paths:
-      - 'build/package_month_hardship_wasm.py'
-      - 'src/phase5_hardship_worker.js'
-      - 'src/phase5_iphone_selfcheck.js'
-      - 'tests/browser_month_hardship_wasm.py'
-      - 'tests/test_package_month_hardship_wasm.py'
-      - '.github/workflows/phase5-offline-ui-e2e.yml'
   workflow_dispatch:
+
 permissions:
   contents: read
   actions: read

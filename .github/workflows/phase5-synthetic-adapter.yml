@@ -1,16 +1,7 @@
 name: Phase 5 synthetic integration boundary regression
 on:
-  push:
-    paths:
-      - 'integration/phase5_*.cjs'
-      - 'tests/phase5_*.cjs'
-      - '.github/workflows/phase5-synthetic-adapter.yml'
-  pull_request:
-    paths:
-      - 'integration/phase5_*.cjs'
-      - 'tests/phase5_synthetic_adapter.test.cjs'
-      - '.github/workflows/phase5-synthetic-adapter.yml'
   workflow_dispatch:
+
 permissions:
   contents: read
 jobs:

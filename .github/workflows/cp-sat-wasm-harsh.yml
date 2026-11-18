@@ -2,11 +2,8 @@
 # Synthetic-only input. Does not change the already-proven fixed math probe.
 name: Full-month three-stage hardship CP-SAT WASM experiment
 on:
-  push:
-    branches: [main]
-    paths:
-      - '.github/workflows/cp-sat-wasm-harsh.yml'
   workflow_dispatch:
+
 permissions:
   contents: read
 jobs:

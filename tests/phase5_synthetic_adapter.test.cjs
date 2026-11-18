@@ -24,4 +24,15 @@ const adjacent=a.slice();adjacent[16]=0;
 assert.throws(()=>project(s,{...r,assignments:adjacent,filled:3,missing:369}),/Next-day rest/);
 const close=a.slice();close[5]=0;
 assert.throws(()=>project(s,{...r,assignments:close,filled:3,missing:369}),/Insufficient guard rest/);
+
+// The full-month v4 C++ and v2 Python protocols accept 106 staff per pool.
+for(const count of [100,101,106]){
+ const fixture={...s,staff:count,mask:'1'.repeat(s.shifts*count),targets:Array(count).fill(0)};
+ assert.equal(normalize(fixture).split('\n')[3],`${s.shifts} ${count}`);
+ const empty={status:'FEASIBLE',assignments:Array(s.shifts).fill(-1),filled:0,missing:s.shifts};
+ assert.equal(project(fixture,empty).missing,s.shifts);
+}
+const oversized={...s,staff:107,mask:'1'.repeat(s.shifts*107),targets:Array(107).fill(0)};
+assert.throws(()=>normalize(oversized),/staff count/);
+
 console.log('Phase 5 synthetic adapter boundary regression PASS');

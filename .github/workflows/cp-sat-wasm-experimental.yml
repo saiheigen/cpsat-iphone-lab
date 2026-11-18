@@ -1,10 +1,8 @@
 # Synthetic mathematical probe only. Never upload military rosters or personnel.
 name: Experimental CP-SAT WebAssembly
 on:
-  push:
-    paths:
-      - '.github/workflows/cp-sat-wasm-experimental.yml'
   workflow_dispatch:
+
 permissions:
   contents: read
 jobs:

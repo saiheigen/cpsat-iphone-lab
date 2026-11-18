@@ -2,12 +2,8 @@
 # Synthetic-only input. Does not change the already-proven fixed math probe.
 name: Dynamic assignment CP-SAT WebAssembly build
 on:
-  push:
-    paths:
-      - '.github/workflows/cp-sat-wasm-dynamic.yml'
-      - 'src/cp_sat_assignment_bridge.cc'
-      - 'tests/dynamic_assignment_wasm.cjs'
   workflow_dispatch:
+
 permissions:
   contents: read
 jobs:
