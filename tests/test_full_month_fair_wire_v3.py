@@ -104,6 +104,36 @@ class FairMonthWireTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError,"count mismatch"):
             audit_full_month_fair_v3_response(v3,result)
 
+    def test_solver_status_flags_cannot_contradict_each_other(self):
+        v3 = self.source()
+        count = 372
+        cost = sum(v3["targets"])
+        original = {
+            "status": "FEASIBLE", "fill_phase": "FEASIBLE",
+            "fair_phase": "UNKNOWN", "fill_optimal_proven": False,
+            "fair_optimal_proven_given_fill": False,
+            "assignments": [-1] * count, "filled": 0, "missing": count,
+            "actual_counts": [0, 0],
+            "phase1_abs_deviation": cost,
+            "final_abs_deviation": cost,
+            "fairness_improved": False,
+        }
+        def reject(updates, pattern):
+            claim = {**original, **updates}
+            with self.assertRaisesRegex(ValueError, pattern):
+                audit_full_month_fair_v3_response(v3, claim)
+        reject({"fair_optimal_proven_given_fill": True}, "Fairness proof flag")
+        reject({"fair_phase": "OPTIMAL"}, "Fairness proof flag")
+        reject({"fill_phase": "OPTIMAL"}, "OPTIMAL fill phase")
+        reject({"fill_optimal_proven": True}, "Unproven fill-optimal")
+        reject({"fair_phase": "OPTIMAL",
+                "fair_optimal_proven_given_fill": True,
+                "fill_phase": "OPTIMAL",
+                "fill_optimal_proven": True}, "overall status")
+        reject({"phase1_abs_deviation": cost + 1,
+                "fairness_improved": True}, "UNKNOWN fairness phase")
+        reject({"fair_optimal_proven_given_fill": 1}, "boolean solver proof")
+
     def test_rehashed_modified_target_still_rejected(self):
         v3=self.source()
         lines=v3["payload"].splitlines()
