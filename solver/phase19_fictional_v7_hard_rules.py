@@ -73,6 +73,30 @@ def invented_month(pool: str) -> InventedMonth:
                 (Shift("officer", date(2026, 12, 5), 5).key, people[7].id))
     else:
         raise ValueError("Only two invented duty pools are supported")
+
+    # Only a handful of invented calendar days are declared on-site for
+    # this first source-to-WASM bridge. All remaining days are explicitly
+    # exempt_all. This avoids a near-complete highly symmetric candidate
+    # matrix masking whether the eligibility transport actually works.
+    # It is NOT a claim about actual operational staffing or duty coverage.
+    fictional_available_days = (
+        ({3,7},{3},{9,12},{17},{8},{8},set(),{2,3},{6},{2,5})
+        if pool == "door" else
+        ({10},{14},{22},{2,5},set(),{26},{2,3,6},{5})
+    )
+    restrictions = []
+    for person, available in zip(people, fictional_available_days):
+        opened = None
+        for d in range(1,33):
+            prohibited = d <= 31 and d not in available
+            if prohibited and opened is None:
+                opened = d
+            if not prohibited and opened is not None:
+                restrictions.append(Event(
+                    person.id,"exempt_all",date(2026,12,opened),
+                    date(2026,12,d-1)))
+                opened = None
+    events += tuple(restrictions)
     return InventedMonth(pool, people, events, history, pins)
 
 
@@ -124,7 +148,10 @@ def audit_genuine_result(case: dict, got: dict) -> dict:
     Audit feasibility and claim consistency; this is NOT an independent
     proof of global optimality nor independent WASM execution attestation.
     """
-    require = lambda ok, label: None if ok else (_ for _ in ()).throw(ValueError(label))
+    def require(ok, label):
+        if not ok:
+            raise ValueError(label)
+
     require(case.get("source") == SOURCE and case.get("synthetic_only") is True,
             "Only the two invented full-month cases are valid")
     require(hashlib.sha256(case["frame"].encode("ascii")).hexdigest() == case["sha256"],
