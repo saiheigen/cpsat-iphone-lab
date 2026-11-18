@@ -55,8 +55,7 @@ def require(condition: bool, message: str):
 def shape(obj, fields: frozenset[str], name: str):
     require(type(obj) is dict, name + " must be an object")
     unknown = set(obj) - fields
-    require(not unknown, name + " contains unknown or unsafe fields: " +
-            ", ".join(sorted(unknown)[:5]))
+    require(not unknown, name + " contains unexpected fields; rejected for privacy")
 
 
 def integer(value, name: str, *, minimum: int = 0, maximum: int = 2_000_000):
