@@ -64,6 +64,20 @@ jobs:
         run: |
           node --check tests/month_hardship_real_wasm.cjs
           node tests/month_hardship_real_wasm.cjs --preflight
+          node tests/month_hardship_real_wasm.cjs --emit-browser-fixtures synthetic_hardship_cases.json
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          x=json.loads(Path("synthetic_hardship_cases.json").read_text())
+          assert x["contract"]=="guard-month-harsh-v4"
+          assert x["source"]=="synthetic-fixtures-no-real-workforce-data"
+          seen={case["id"] for case in x["cases"]}
+          assert seen=={"tiny","door-blackouts-no-hints","officer-blackouts-no-hints","door-forced-vacancies"}
+          assert sum(c["shifts"] for c in x["cases"] if c["id"]!="tiny")==961
+          assert all(len(c["mask"])==c["shifts"]*c["staff"] for c in x["cases"])
+          assert x["cases"][0]["oracleBest"]>=0
+          print("Four anonymous synthetic v4 browser fixtures valid; NOT real WASM proof")
+          PY
       - name: Setup Emscripten
         uses: emscripten-core/setup-emsdk@v15
         with:
