@@ -121,6 +121,29 @@ function preflight(){
  return {accepted:true,stage:'JS-fictional-preflight-NOT-WASM',
          exact_toy_oracle:oracle,samples};
 }
+function browserFixtureManifest(){
+ const scenarios=[{id:'tiny',name:'兩名虛構人員：四班艱苦哨最佳解',
+  source:toy(),targets:[2,2],expectedFill:4},
+  ...[['door','blackouts-no-hints'],
+       ['officer','blackouts-no-hints'],
+       ['door','forced-vacancies']].map(([pool,variant])=>{
+    const s=createScenario(pool,variant);
+    return {id:pool+'-'+variant,name:pool+'/'+variant,
+      source:s,targets:targetsFor(s),
+      expectedFill:s.witness.filter(x=>x>=0).length};
+  })];
+ const cases=scenarios.map(({id,name,source,targets,expectedFill})=>({
+  id,name,year:source.year,month:source.month,pool:source.pool,
+  shifts:source.shiftCount,staff:source.staff,
+  mask:source.allowed,pins:source.pins,hints:source.hints,
+  targets,expectedFill,synthetic_only:true
+ }));
+ return {contract:'guard-month-harsh-v4',
+  source:'synthetic-fixtures-no-real-workforce-data',cases};
+}
+function browserFixtureBytes(){
+ return Buffer.from(JSON.stringify(browserFixtureManifest(),null,2)+'\n','utf8');
+}
 async function main(){
  const [jsfile,wasmfile,outfile]=process.argv.slice(2);
  if(!jsfile||!wasmfile||!outfile)
@@ -185,6 +208,7 @@ async function main(){
   exact_independent_hardship_oracle_verified:true,
   tested_full_589_dense_shifts:true,
   invalid_frames_rejected:invalidFrames.length,
+  fixture_sha256:crypto.createHash('sha256').update(browserFixtureBytes()).digest('hex'),
   cases,
   wasm_sha256:crypto.createHash('sha256').update(binary).digest('hex'),
   js_sha256:crypto.createHash('sha256').update(fs.readFileSync(jsfile)).digest('hex'),
@@ -194,8 +218,18 @@ async function main(){
  console.log(JSON.stringify(proof,null,2));
 }
 if(require.main===module){
- if(process.argv[2]==='--preflight')console.log(JSON.stringify(preflight(),null,2));
- else main().catch(e=>{console.error('GENUINE 3-STAGE WASM FAILED:',e);
-   process.exitCode=1;});
+ if(process.argv[2]==='--preflight'){
+  console.log(JSON.stringify(preflight(),null,2));
+ }else if(process.argv[2]==='--emit-browser-fixtures'){
+  const filename=process.argv[3];
+  if(!filename)throw Error('Missing fictional fixture output path');
+  fs.writeFileSync(filename,browserFixtureBytes());
+  console.log('Exported '+browserFixtureManifest().cases.length+
+    ' exact synthetic three-stage browser cases');
+ }else{
+  main().catch(e=>{console.error('GENUINE 3-STAGE WASM FAILED:',e);
+    process.exitCode=1;});
+ }
 }
-module.exports={wire,categories,hardshipScore,exactToyOracle,preflight,toy,check};
+module.exports={wire,categories,hardshipScore,exactToyOracle,preflight,
+ toy,check,browserFixtureBytes,browserFixtureManifest};
