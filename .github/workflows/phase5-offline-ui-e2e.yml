@@ -33,6 +33,7 @@ jobs:
         run: |
           python3 -m py_compile build/package_month_hardship_wasm.py tests/browser_month_hardship_wasm.py
           node --check tests/month_hardship_real_wasm.cjs
+          python3 -m unittest discover -s tests -p 'test_package_month_hardship_wasm.py' -v
       - name: Download only previously proven genuine C++ WASM and proof
         uses: actions/download-artifact@v4
         with:
@@ -69,7 +70,6 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          python3 -m unittest discover -s tests -p 'test_package_month_hardship_wasm.py' -v
           python3 build/package_month_hardship_wasm.py "$HARD_JS" "$HARD_WASM" \
             proof/real_hardship_node_proof.json \
             proof/synthetic_hardship_browser_cases.json \
