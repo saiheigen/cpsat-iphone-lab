@@ -21,3 +21,14 @@ To isolate that problem, the runner now records the exact `file_url_navigation` 
 4. Never promote a synthetic demo to an operational military scheduler or import the preview into v7.
 
 No original v2/v3 release artifact is overwritten; nothing from real military rosters or eligibility is committed.
+
+## Verified results — 2026-11-18 (Taiwan)
+
+- [WebKit compatibility run #44236138486](https://github.com/saiheigen/cpsat-iphone-lab/actions/runs/44236138486): **completed/success** for offline genuine WASM execution in Linux WebKit **26.0** desktop and touch-sized emulation.
+- Four scenarios per profile (**8/8**): the genuine CP-SAT completed, independent audit passed, combined fictional **589 rows = 577 staffed + 12 vacancies** was checked; no external HTTP requests or unhandled page errors.
+- Crucial caveat: **both WebKit profiles rejected direct `file://` navigation**. Both successful runs used `page_load_method=in_memory_local_html_bytes`, with the local HTML rendered into `about:blank`. The original `file://` opening path remains **failed in Linux WebKit**, not accepted. Safari on a real iPhone still needs separate real-device testing.
+- [Chromium regression run #44236138326](https://github.com/saiheigen/cpsat-iphone-lab/actions/runs/44236138326): **completed/success** on unchanged offline Chromium file-path acceptance.
+- [Genuine WASM adapter regression #44236138522](https://github.com/saiheigen/cpsat-iphone-lab/actions/runs/44236138522): **completed/success**.
+- Solver phase limits are visible: WebKit door 372/372 had `fair_phase=UNKNOWN` with L1=444 (not improved); door forced-vacancy 360/372 had `fair_phase=FEASIBLE` and L1 150→86; officer 217/217 had `fair_phase=OPTIMAL`, L1 166→10. **No unproven global fairness-optimality claim.** Browser engines and runtime budgets can produce different valid (and differently optimized) solutions.
+
+Current acceptance summary: **WebKit offline engine/WASM success; direct WebKit file navigation failed; physical iPhone Safari still PENDING; operational v7 rule parity PENDING**.
