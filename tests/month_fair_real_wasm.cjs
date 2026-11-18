@@ -124,10 +124,13 @@ async function main(){
   throw Error('Infeasible hard constraints silently relaxed to improve fairness');
  cases.push({name:'pinned-adjacent-day-conflict',status:'INFEASIBLE',
              fair_phase:'NOT_RUN',accepted:true});
+ const valid=wire(tiny(),[1,1]);
  const badCases=[
-  wire(tiny(),[1]),wire(tiny(),[-1,3]),wire(tiny(),[999,1]),
-  wire(tiny(),[1,1]).replace('guard-month-fair-v3','guard-month-v2'),
-  wire(tiny(),[1,1]).replace(/\n1,1\n$/,'\n'),
+  valid.replace(/\n1,1\n$/,'\n1\n'),
+  valid.replace(/\n1,1\n$/,'\n-1,3\n'),
+  valid.replace(/\n1,1\n$/,'\n999,1\n'),
+  valid.replace('guard-month-fair-v3','guard-month-v2'),
+  valid.replace(/\n1,1\n$/,'\n'),
  ];
  for(const invalid of badCases)
   if(call(invalid).status!=='INVALID_INPUT')throw Error('Invalid fairness data accepted');
