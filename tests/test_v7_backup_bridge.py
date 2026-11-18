@@ -73,6 +73,7 @@ class V7BridgeTests(unittest.TestCase):
         self.assertEqual(len(x.tasks), 589)
         self.assertEqual(x.weights, {"H001": "0.333333"})
         self.assertEqual(x.carry, {"H002": 1})
+        self.assertEqual(x.meal_credit, {"P001": 1, "P002": 0})
         self.assertEqual(len(x.history), 1)
         self.assertEqual(x.history[0].shift.day, date(2026, 11, 29))
         self.assertEqual(x.pins, {"door:2026-12-07:6": "H001"})
@@ -92,6 +93,21 @@ class V7BridgeTests(unittest.TestCase):
         self.assertTrue(static_reason(meal, Shift("officer", date(2026, 12, 9), 5), x.events))
         self.assertTrue(static_reason(meal, Shift("officer", date(2026, 12, 10), 5), x.events))
         self.assertTrue(static_reason(meal, Shift("officer", date(2026, 12, 11), 5), x.events))
+
+    def test_officer_meal_credit_counts_distinct_month_days_only(self):
+        data = fake_backup()
+        # One person can serve several date ranges; overlapping days are
+        # counted ONCE just like v7's Set, even across month boundaries.
+        data["global"]["meal"] = (
+            "P001,115/11/30,115/12/02\\n"
+            "P001,115/12/02,115/12/03\\n"
+            "P001,115/12/30,116/01/02\\n"
+            "P002,115/11/30,115/11/30"
+        )
+        x = convert_v7_backup(data)
+        self.assertEqual(x.meal_credit["P001"], 5)
+        self.assertEqual(x.meal_credit["P002"], 0)
+        self.assertFalse(x.operationally_certified)
 
     def test_three_column_name_without_rank_is_preserved(self):
         data = fake_backup()
