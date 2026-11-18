@@ -86,12 +86,17 @@ def run(browser, html: Path, mobile: bool):
                     raise AssertionError("Full vacancy list is hidden")
                 if page.locator("#vacancy-list li").count()!=expected_days:
                     raise AssertionError("Grouped vacancy days do not match solver")
-                shown=details.inner_text()
+                page.locator("#vacancy-title").click()
+                if not page.locator("#vacancy-list").is_visible():
+                    raise AssertionError("Vacancy details cannot be expanded")
+                lines=page.locator("#vacancy-list li").all_inner_texts()
                 for v in vacancies:
-                    if str(v["day"])+"日：" not in shown:
+                    line=next((line for line in lines if line.startswith(
+                        str(v["day"])+"日：")),None)
+                    if line is None:
                         raise AssertionError("Vacancy day not displayed")
-                    if "第"+str(v["slot"])+"班" not in shown:
-                        raise AssertionError("Vacancy slot not displayed")
+                    if "第"+str(v["slot"])+"班" not in line:
+                        raise AssertionError("Vacancy slot not displayed on correct day")
             elif details.is_visible() or page.locator("#vacancy-list li").count():
                 raise AssertionError("Stale vacancy list remains after complete fill")
             if result.get("status") not in ("OPTIMAL","FEASIBLE"):
