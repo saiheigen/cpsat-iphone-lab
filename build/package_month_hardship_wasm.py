@@ -170,6 +170,7 @@ padding:13px;font-size:12px}small{display:block;color:#647586;overflow-wrap:anyw
 <label for="scenario">選擇已驗證的虛構情境</label>
 <select id="scenario"></select>
 <button id="run">在本機執行真正 WASM 三階段求解</button>
+<p id="engine-mode" aria-live="polite">尚未選擇運算方式</p>
 <p id="status" role="status">尚未執行</p>
 <section id="summary" aria-live="polite">尚無排班摘要</section>
 <details id="vacancy-details" hidden><summary id="vacancy-title">查看完整缺班清單</summary>
@@ -186,11 +187,12 @@ padding:13px;font-size:12px}small{display:block;color:#647586;overflow-wrap:anyw
 </section>
 <pre id="output">沒有結果</pre>
 <small>WASM SHA-256：__WASM_SHA__</small>
-</main><script>__GLUE__</script>
+</main><script id="phase5-wasm-glue">__GLUE__</script>
 <script>
 "use strict";
 const CASES=__CASES__;
 const ENCODED=__WASM_PARTS__;
+const WORKER_BOOTSTRAP=__WORKER_BOOTSTRAP__;
 const HOURS={
  door:[[22,24],[0,2],[2,4],[4,6],[6,8],[8,10],[10,12],[12,14],[14,16],[16,18],[18,20],[20,22]],
  officer:[[22,24],[0,2],[2,4],[4,6],[6,12],[12,18],[18,22]]
@@ -352,7 +354,88 @@ function updateCombinedReadiness(){
   "請先成功求解安官整月與大門強制缺班情境":
   "兩個虛構月份已分別求解與驗證，可建立 589 班合併預覽";
 }
-let runtime=null;
+let runtime=null,solverWorker=null,workerStartup=null,workerInitialized=false;
+let workerSeq=0,workerWasmSent=false;
+const pendingWorkerRequests=new Map();
+function disableWorker(err){
+ if(solverWorker){try{solverWorker.terminate();}catch(_){}}
+ solverWorker=null;workerInitialized=false;
+ for(const [,entry] of pendingWorkerRequests)entry.reject(Error(String(err||"Worker ended")));
+ pendingWorkerRequests.clear();
+}
+function prepareWorker(){
+ if(workerStartup)return workerStartup;
+ workerStartup=new Promise(resolve=>{
+  if(typeof Worker!=="function"||typeof Blob!=="function"||
+      !URL||typeof URL.createObjectURL!=="function"){
+   resolve(false);return;
+  }
+  let w=null,url=null,timer=null,settled=false;
+  function finish(ready){
+   if(settled)return;
+   settled=true;if(timer!==null)clearTimeout(timer);
+   if(url)URL.revokeObjectURL(url);
+   if(!ready)disableWorker("Worker startup unavailable");
+   workerInitialized=ready;resolve(ready);
+  }
+  try{
+   const glue=document.getElementById("phase5-wasm-glue").textContent;
+   url=URL.createObjectURL(new Blob([glue,"\n",WORKER_BOOTSTRAP],
+     {type:"text/javascript"}));
+   w=new Worker(url);
+   solverWorker=w;
+   w.onmessage=event=>{
+    const data=event.data;
+    if(!data||typeof data!=="object")return;
+    if(data.type==="ready"){finish(true);return;}
+    const entry=pendingWorkerRequests.get(data.id);
+    if(!entry)return;
+    pendingWorkerRequests.delete(data.id);
+    if(data.type==="result")entry.resolve(data.result);
+    else if(data.type==="error")entry.reject(Error(data.error||"Worker solver failed"));
+   };
+   w.onerror=event=>{
+    if(event&&typeof event.preventDefault==="function")event.preventDefault();
+    if(!settled)finish(false);
+    else disableWorker("Worker runtime error");
+   };
+   timer=setTimeout(()=>finish(false),12000);
+  }catch(_){finish(false);}
+ });
+ return workerStartup;
+}
+async function solveWithMode(t){
+ const frame=serialize(t);
+ if(await prepareWorker()){
+  if(!solverWorker)throw Error("Worker unexpectedly unavailable");
+  const id=++workerSeq;
+  const payload={type:"solve",id,frame};
+  const transfers=[];
+  if(!workerWasmSent){
+   const bytes=toBytes(ENCODED);
+   if(!WebAssembly.validate(bytes))throw Error("Worker WASM failed validation");
+   payload.wasm=bytes.buffer;
+   transfers.push(bytes.buffer);
+   workerWasmSent=true;
+  }
+  const result=await new Promise((resolve,reject)=>{
+   pendingWorkerRequests.set(id,{resolve,reject});
+   try{solverWorker.postMessage(payload,transfers);}
+   catch(err){pendingWorkerRequests.delete(id);reject(err);}
+  });
+  return {got:result,executionMode:"dedicated-worker"};
+ }
+ if(typeof createMonthHardshipModule!=="function")
+  throw Error("缺少真正 CP-SAT 模組");
+ if(!runtime){
+  const wasm=toBytes(ENCODED);
+  if(!WebAssembly.validate(wasm))throw Error("WASM 驗證失敗");
+  runtime=await createMonthHardshipModule({wasmBinary:wasm,
+   print:()=>{},printErr:e=>console.error(String(e))});
+ }
+ return {got:JSON.parse(runtime.ccall("solve_guard_month_harsh_v4",
+   "string",["string"],[frame])),executionMode:"main-thread-fallback"};
+}
 select.addEventListener("change",()=>{
  clearCombinedView();updateCombinedReadiness();
  status.textContent="已切換情境，請重新執行求解";
@@ -366,24 +449,22 @@ btn.addEventListener("click",async()=>{
  const selected=select.value;
  if(combinedCases.includes(selected))acceptedSynthetic.delete(selected);
  updateCombinedReadiness();
- btn.disabled=true;status.textContent="正在本機執行三階段求解…";
+ btn.disabled=true;select.disabled=true;combinedBtn.disabled=true;
+ status.textContent="正在本機執行三階段求解…";
+ document.getElementById("engine-mode").textContent="正在初始化本機 Worker／WASM…";
  out.textContent="尚待獨立驗證";summary.textContent="正在計算，尚無已驗證班表";
  vacancyDetails.hidden=true;vacancyDetails.open=false;vacancyList.replaceChildren();
  rosterDetails.hidden=true;rosterDetails.open=false;rosterDays.replaceChildren();
  await new Promise(ok=>requestAnimationFrame(ok));
  const start=Date.now();
  try{
-  if(typeof createMonthHardshipModule!=="function")throw Error("缺少真正 CP-SAT 模組");
-  if(!runtime){
-   const wasm=toBytes(ENCODED);
-   if(!WebAssembly.validate(wasm))throw Error("WASM 驗證失敗");
-   runtime=await createMonthHardshipModule({wasmBinary:wasm,
-      print:()=>{},printErr:e=>console.error(String(e))});
-  }
   const t=CASES.find(t=>t.id===select.value);
   if(!t)throw Error("找不到虛構情境");
-  const got=JSON.parse(runtime.ccall("solve_guard_month_harsh_v4",
-      "string",["string"],[serialize(t)]));
+  const {got,executionMode}=await solveWithMode(t);
+  document.getElementById("engine-mode").textContent=
+    executionMode==="dedicated-worker"?
+    "✅ 背景 Worker 運算，畫面可持續回應":
+    "⚠️ 本瀏覽器改用主執行緒運算；計算期間可能卡頓";
   const verified=independentlyAudit(t,got);
   const vacancies=got.assignments.flatMap((p,i)=>p===-1?[{day:Math.floor(i/HOURS[t.pool].length)+1,slot:i%HOURS[t.pool].length+1}]:[]);
   if(vacancies.length!==verified.missing)throw Error("缺班清單與獨立驗證不一致");
@@ -438,6 +519,7 @@ btn.addEventListener("click",async()=>{
    hardship_final_score:verified.hardship_final_score,
    hardship_optimal_proven:verified.hardship_optimal_proven,
    elapsed_ms:Date.now()-start,runtime:"this-device",
+   execution_mode:executionMode,
    real_iphone_safari_verified:false,
    operationally_certified:false},null,2);
  }catch(err){
@@ -446,7 +528,7 @@ btn.addEventListener("click",async()=>{
   vacancyDetails.hidden=true;vacancyDetails.open=false;vacancyList.replaceChildren();
  rosterDetails.hidden=true;rosterDetails.open=false;rosterDays.replaceChildren();
   out.textContent=String(err&&err.stack||err);
- }finally{btn.disabled=false;}
+ }finally{btn.disabled=false;select.disabled=false;updateCombinedReadiness();}
 });
 combinedBtn.addEventListener("click",()=>{
  clearCombinedView();
@@ -529,7 +611,11 @@ def make(js, wasm_b64, proof, fixtures, out):
     # No user-supplied records; preserve generated glue without script breakout.
     js = re.sub(r"</script", r"<\/script", js, flags=re.IGNORECASE)
     chunks = [wasm_b64[i:i+4096] for i in range(0, len(wasm_b64), 4096)]
+    worker_script=(Path(__file__).resolve().parents[1] / "src" /
+                   "phase5_hardship_worker.js").read_text("utf-8")
+    worker_safe=json.dumps(worker_script,ensure_ascii=False).replace("&",r"\u0026").replace("<",r"\u003c").replace(">",r"\u003e")
     text = (HTML.replace("__GLUE__", js)
+            .replace("__WORKER_BOOTSTRAP__",worker_safe)
             .replace("__WASM_PARTS__", " +\n".join(json.dumps(x) for x in chunks))
             # JSON is inside a script element: escape HTML/script breakers
             # even when the fixture is tied to a genuine Node proof digest.
