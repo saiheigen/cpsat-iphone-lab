@@ -231,7 +231,7 @@ button.addEventListener('click',async()=>{
    if(t.reference&&got.assignments.some((v,i)=>v!==t.reference[i]))
     throw Error('完整月份人員與唯一候選人不一致');
   }
-  statusElement.textContent='✅ 本機真正 CP-SAT 589 班介面驗證通過';
+  statusElement.textContent='✅ 真正 CP-SAT 離線模型驗證通過（虛構資料）';
   output.textContent=JSON.stringify({accepted:true,scenario:name,
     status:got.status,filled,month:t.year+'-'+String(t.month).padStart(2,'0'),
     shifts:t.shifts,staff:t.staff,elapsed_ms:Date.now()-begin,
