@@ -81,10 +81,29 @@ def audit_full_month_fair_v3_response(model: dict, got: dict) -> dict:
         raise ValueError("No valid first-stage fill status")
     if got.get("fair_phase") not in ("OPTIMAL", "FEASIBLE", "UNKNOWN"):
         raise ValueError("Invalid second-stage fairness status")
-    if (got.get("status") == "OPTIMAL" and not
-            (got.get("fill_optimal_proven") is True and
-             got.get("fair_optimal_proven_given_fill") is True)):
-        raise ValueError("Unsupported all-stage OPTIMAL claim")
+    # Status flags are untrusted, even when every returned assignment is
+    # legal. Independently enforce their logical consistency so a UI cannot
+    # present an UNKNOWN fairness stage as proven OPTIMAL.
+    fill_phase = got["fill_phase"]
+    fair_phase = got["fair_phase"]
+    fill_flag = got.get("fill_optimal_proven")
+    fair_flag = got.get("fair_optimal_proven_given_fill")
+    if type(fill_flag) is not bool or type(fair_flag) is not bool:
+        raise ValueError("Missing explicit boolean solver proof flags")
+    if fill_phase == "OPTIMAL" and not fill_flag:
+        raise ValueError("OPTIMAL fill phase cannot have false proof flag")
+    if fill_phase == "FEASIBLE" and fill_flag:
+        original_pins = source["payload"].splitlines()[5].split(",")
+        possible_upper = len(original_pins) - original_pins.count("-1")
+        if base["filled"] != possible_upper:
+            raise ValueError("Unproven fill-optimal flag exceeds simple coverage bound")
+    if (fair_phase == "OPTIMAL") is not fair_flag:
+        raise ValueError("Fairness proof flag contradicts second-stage solver status")
+    if got.get("status") == "OPTIMAL":
+        if not (fill_flag and fair_flag):
+            raise ValueError("Unsupported all-stage OPTIMAL claim")
+    elif fill_flag and fair_flag:
+        raise ValueError("All phases proven OPTIMAL but overall status is not OPTIMAL")
     staff = source["people"]
     actual = [0] * len(staff)
     indices = got["assignments"]
@@ -102,6 +121,8 @@ def audit_full_month_fair_v3_response(model: dict, got: dict) -> dict:
         raise ValueError("Fairness stage lowered fill or worsened count deviation")
     if got.get("fairness_improved") is not (l1 < start):
         raise ValueError("Incorrect fairness-improved flag")
+    if fair_phase == "UNKNOWN" and l1 != start:
+        raise ValueError("UNKNOWN fairness phase cannot claim an improved objective")
     return {
         "assignments": base["assignments"],
         "filled": base["filled"],
