@@ -166,7 +166,8 @@ padding:13px;font-size:12px}small{display:block;color:#647586;overflow-wrap:anyw
 <select id="scenario"></select>
 <button id="run">在本機執行真正 WASM 三階段求解</button>
 <p id="status" role="status">尚未執行</p>
-<section id="summary" aria-live="polite">尚無排班摘要</section>\n<pre id="output">沒有結果</pre>
+<section id="summary" aria-live="polite">尚無排班摘要</section>
+<pre id="output">沒有結果</pre>
 <small>WASM SHA-256：__WASM_SHA__</small>
 </main><script>__GLUE__</script>
 <script>
@@ -310,7 +311,8 @@ function independentlyAudit(t,res){
          hardship_optimal_proven:res.hardship_optimal_proven_given_locked_predecessors===true};
 }
 const btn=document.getElementById("run");
-const status=document.getElementById("status"),out=document.getElementById("output");\nconst summary=document.getElementById("summary");
+const status=document.getElementById("status"),out=document.getElementById("output");
+const summary=document.getElementById("summary");
 let runtime=null;
 btn.addEventListener("click",async()=>{
  btn.disabled=true;status.textContent="正在本機執行三階段求解…";
@@ -329,11 +331,15 @@ btn.addEventListener("click",async()=>{
   if(!t)throw Error("找不到虛構情境");
   const got=JSON.parse(runtime.ccall("solve_guard_month_harsh_v4",
       "string",["string"],[serialize(t)]));
-  const verified=independentlyAudit(t,got);\n  const vacancies=got.assignments.flatMap((p,i)=>p===-1?[{day:Math.floor(i/HOURS[t.pool].length)+1,slot:i%HOURS[t.pool].length+1}]:[]);\n  if(vacancies.length!==verified.missing)throw Error("缺班清單與獨立驗證不一致");\n  summary.textContent="已排 "+verified.filled+" 班｜缺班 "+verified.missing+" 班"+\n    (vacancies.length?"｜缺班位置："+vacancies.slice(0,12).map(v=>v.day+"日第"+v.slot+"班").join("、")+(vacancies.length>12?"…（完整清單見下方）":""):"");
+  const verified=independentlyAudit(t,got);
+  const vacancies=got.assignments.flatMap((p,i)=>p===-1?[{day:Math.floor(i/HOURS[t.pool].length)+1,slot:i%HOURS[t.pool].length+1}]:[]);
+  if(vacancies.length!==verified.missing)throw Error("缺班清單與獨立驗證不一致");\n  summary.textContent="已排 "+verified.filled+" 班｜缺班 "+verified.missing+" 班"+
+    (vacancies.length?"｜缺班位置："+vacancies.slice(0,12).map(v=>v.day+"日第"+v.slot+"班").join("、")+(vacancies.length>12?"…（完整清單見下方）":""):"");
   status.textContent="✅ 真正 WASM 三階段合法填班與艱苦公平檢查通過";
   out.textContent=JSON.stringify({accepted:true,scenario:t.id,
    status:got.status,shifts:t.shifts,staff:t.staff,
-   filled:verified.filled,missing:verified.missing,\n   vacancies,
+   filled:verified.filled,missing:verified.missing,
+   vacancies,
    phase1_abs_deviation:verified.start_cost,
    final_abs_deviation:verified.final_cost,
    fill_phase:verified.fill_phase,fair_phase:verified.fair_phase,
