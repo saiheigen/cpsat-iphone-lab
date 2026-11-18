@@ -175,6 +175,7 @@ padding:13px;font-size:12px}small{display:block;color:#647586;overflow-wrap:anyw
 <select id="scenario"></select>
 <button id="run">在本機執行真正 WASM 三階段求解</button>
 <button id="reset-worker" type="button">重啟本機運算引擎並清空預覽</button>
+<button id="cancel-solve" type="button" disabled>取消目前的背景求解</button>
 <p id="engine-mode" aria-live="polite">尚未選擇運算方式</p>
 <p id="status" role="status">尚未執行</p>
 <section id="summary" aria-live="polite">尚無排班摘要</section>
@@ -363,6 +364,7 @@ function independentlyAudit(t,res){
 }
 const btn=document.getElementById("run");
 const resetBtn=document.getElementById("reset-worker");
+const cancelBtn=document.getElementById("cancel-solve");
 const status=document.getElementById("status"),out=document.getElementById("output");
 const summary=document.getElementById("summary");
 const vacancyDetails=document.getElementById("vacancy-details");
@@ -388,7 +390,7 @@ function updateCombinedReadiness(){
   "兩個虛構月份已分別求解與驗證，可建立 589 班合併預覽";
 }
 let runtime=null,solverWorker=null,workerStartup=null,workerInitialized=false;
-let workerSeq=0,workerWasmSent=false;
+let workerSeq=0,workerWasmSent=false,solveGeneration=0;
 const pendingWorkerRequests=new Map();
 function disableWorker(err){
  if(solverWorker){try{solverWorker.terminate();}catch(_){}}
@@ -448,9 +450,12 @@ function prepareWorker(){
  });
  return workerStartup;
 }
-async function solveWithMode(t){
+async function solveWithMode(t,generation){
  const frame=serialize(t);
- if(await prepareWorker()){
+ const workerReady=await prepareWorker();
+ if(generation!==solveGeneration)
+  throw Error("Cancelled before Worker solve");
+ if(workerReady){
   if(!solverWorker)throw Error("Worker unexpectedly unavailable");
   const id=++workerSeq;
   const payload={type:"solve",id,frame};
@@ -490,6 +495,17 @@ async function solveWithMode(t){
  return {got:JSON.parse(runtime.ccall("solve_guard_month_harsh_v4",
    "string",["string"],[frame])),executionMode:"main-thread-fallback"};
 }
+cancelBtn.addEventListener("click",()=>{
+ if(!btn.disabled)return;
+ solveGeneration++;
+ disableWorker("User cancelled the active Worker calculation");
+ runtime=null;
+ acceptedSynthetic.clear();
+ clearCombinedView();updateCombinedReadiness();
+ cancelBtn.disabled=true;
+ status.textContent="⏹ 已要求取消計算，舊結果不可採用";
+ window.dispatchEvent(new Event("phase5-session-reset"));
+});
 resetBtn.addEventListener("click",()=>{
  if(btn.disabled)return;
  disableWorker("User requested a clean Worker restart");
@@ -517,7 +533,8 @@ btn.addEventListener("click",async()=>{
  const selected=select.value;
  if(combinedCases.includes(selected))acceptedSynthetic.delete(selected);
  updateCombinedReadiness();
- btn.disabled=true;select.disabled=true;combinedBtn.disabled=true;resetBtn.disabled=true;
+ const generation=++solveGeneration;
+ btn.disabled=true;select.disabled=true;combinedBtn.disabled=true;resetBtn.disabled=true;cancelBtn.disabled=false;
  status.textContent="正在本機執行三階段求解…";
  document.getElementById("engine-mode").textContent="正在初始化本機 Worker／WASM…";
  out.textContent="尚待獨立驗證";summary.textContent="正在計算，尚無已驗證班表";
@@ -528,7 +545,8 @@ btn.addEventListener("click",async()=>{
  try{
   const t=CASES.find(t=>t.id===select.value);
   if(!t)throw Error("找不到虛構情境");
-  const {got,executionMode}=await solveWithMode(t);
+  const {got,executionMode}=await solveWithMode(t,generation);
+  if(generation!==solveGeneration)throw Error("Cancelled stale solve response");
   document.getElementById("engine-mode").textContent=
     executionMode==="dedicated-worker"?
     "✅ 背景 Worker 運算，畫面可持續回應":
@@ -591,12 +609,14 @@ btn.addEventListener("click",async()=>{
    real_iphone_safari_verified:false,
    operationally_certified:false},null,2);
  }catch(err){
-  status.textContent="❌ 本機三階段求解／獨立驗證失敗";
+  status.textContent=generation!==solveGeneration?
+   "⏹ 計算已取消；沒有可採用的新班表":
+   "❌ 本機三階段求解／獨立驗證失敗";
   summary.textContent="未產生可驗證班表，禁止採用結果";
   vacancyDetails.hidden=true;vacancyDetails.open=false;vacancyList.replaceChildren();
  rosterDetails.hidden=true;rosterDetails.open=false;rosterDays.replaceChildren();
   out.textContent=String(err&&err.stack||err);
- }finally{btn.disabled=false;select.disabled=false;resetBtn.disabled=false;updateCombinedReadiness();}
+ }finally{btn.disabled=false;select.disabled=false;resetBtn.disabled=false;cancelBtn.disabled=true;updateCombinedReadiness();}
 });
 combinedBtn.addEventListener("click",()=>{
  clearCombinedView();
