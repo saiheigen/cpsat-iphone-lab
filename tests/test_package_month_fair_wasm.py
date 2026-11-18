@@ -123,7 +123,7 @@ class FairPackagerGateTests(unittest.TestCase):
         page=self.html.read_text("utf-8")
         self.assertNotIn(attack,page)
         self.assertNotIn("window.stolen=1</script>",page)
-        self.assertIn(r"\\u003c/script\\u003e",page)
+        self.assertIn(r"\u003c/script\u003e",page)
 
     def test_missing_manifest_digest_rejected(self):
         self.data.pop("fixture_sha256")
