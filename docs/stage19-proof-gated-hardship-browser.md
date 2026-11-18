@@ -29,7 +29,7 @@
 ## 已驗收與待驗收分級
 
 1. **已驗收：原生第三階段 CP-SAT（Python）**。 [CI #141](https://github.com/saiheigen/cpsat-iphone-lab/actions/runs/44222864822) 與 [CI #145](https://github.com/saiheigen/cpsat-iphone-lab/actions/runs/44223696850) 已通過。小型獨立窮舉、跨日時段、固定班次、休假及負擔分數核對正常。
-2. **已驗收：離線頁打包器的防錯、證據格式與 JS 語法**。 [CI #151](https://github.com/saiheigen/cpsat-iphone-lab/actions/runs/44225246851) 成功（此為新實際 `node --check` 前的版本）；後續版本加入更嚴格的測試，實際狀態請見 CI。所有 fake fixture 都只是包裝安全測試，不是新的 C++ WASM 成功證據。
+2. **已驗收：離線頁打包器的防錯、證據格式、四組虛構案例及 JS 語法**。[CI #153](https://github.com/saiheigen/cpsat-iphone-lab/actions/runs/44225658287) **completed/success**，含 `node --check` 新頁面腳本和 Node v4 manifest 預檢。所有 fake fixture 都只是包裝安全測試，不是新的 C++ WASM 成功證據。
 3. **尚未驗收：真正三階段 C++／WASM**。 [Three-stage v4 #1](https://github.com/saiheigen/cpsat-iphone-lab/actions/runs/44223914115) 初步已通過前置測試與 CMake 設定，真正編譯與 Node 三階段求解在本段落撰寫時**尚未取得最終結果**。依 workflow run 最終狀態更新，不得猜測成功。
 4. **尚未驗收：v4 真正離線 HTML 與 Chromium 的 8 組案例**。需由上游真正 v4 成功後觸發，尚不能宣稱結果。
 5. **尚未驗收：真正 iPhone Safari 與 v7.0 業務資料整合**。在真實裝置上開啟 `file://` 單檔、可用記憶體、背景切換、停止按鈕、過熱及電池尚無裝置證據。
