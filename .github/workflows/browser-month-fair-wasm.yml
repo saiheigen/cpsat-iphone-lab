@@ -1,0 +1,57 @@
+# Experimental two-stage 589-shift CP-SAT WebAssembly browser acceptance.
+# Triggered ONLY by successful proof-gated packaging with real Node solver.
+# Linux desktop/mobile-sized Chromium is not physical iPhone Safari.
+name: Real offline full-month fair CP-SAT WASM browser acceptance
+on:
+  workflow_run:
+    workflows: ["Package proven full-month fair CP-SAT WASM demo"]
+    types: [completed]
+  workflow_dispatch:
+    inputs:
+      source_run_id:
+        description: "Successful proof-gated fair-count HTML packaging run ID"
+        type: string
+        required: true
+permissions:
+  actions: read
+  contents: read
+jobs:
+  real-offline-fair-browser:
+    if: >-
+      (github.event_name == 'workflow_run' &&
+       github.event.workflow_run.conclusion == 'success' &&
+       github.event.workflow_run.head_repository.full_name == github.repository) ||
+      github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-24.04
+    container:
+      image: mcr.microsoft.com/playwright/python:v1.58.0-noble
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: Download ONLY proof-gated real two-stage WASM standalone page
+        uses: actions/download-artifact@v4
+        with:
+          name: genuine-full-month-fair-cpsat-wasm-offline-demo
+          run-id: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.id || inputs.source_run_id }}
+          repository: ${{ github.repository }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          path: received
+      - name: Install matching Playwright Python client
+        run: python -m pip install --disable-pip-version-check playwright==1.58.0
+      - name: Actually solve four synthetic fair-count cases in offline browsers
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(find received -type f -name experimental_full_month_fair_cp_sat.html | wc -l)" -eq 1
+          html="$(find received -type f -name experimental_full_month_fair_cp_sat.html)"
+          test -s "$html"
+          python tests/browser_month_fair_wasm.py "$html"
+      - name: Preserve real-browser acceptance proof and failure screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: real-fair-month-cpsat-browser-proof
+          path: |
+            fair_month_browser_proof.json
+            fair-*-failure.png
+          if-no-files-found: warn
