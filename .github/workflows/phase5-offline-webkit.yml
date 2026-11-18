@@ -1,0 +1,81 @@
+# Browser engine compatibility gate for already proof-gated, synthetic-only C++/WASM HTML.
+# Linux WebKit is useful for Safari-related defects but is NOT physical iPhone Safari.
+name: Phase 5 offline WebKit WASM compatibility acceptance
+on:
+  push:
+    paths:
+      - 'tests/browser_month_hardship_wasm.py'
+      - '.github/workflows/phase5-offline-webkit.yml'
+  pull_request:
+    paths:
+      - 'tests/browser_month_hardship_wasm.py'
+      - '.github/workflows/phase5-offline-webkit.yml'
+  workflow_dispatch:
+permissions:
+  actions: read
+  contents: read
+jobs:
+  offline-linux-webkit-wasm:
+    runs-on: ubuntu-24.04
+    container:
+      image: mcr.microsoft.com/playwright/python:v1.58.0-noble
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify test syntax and attested artifact source
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m py_compile tests/browser_month_hardship_wasm.py
+          python3 - <<'PY'
+          # The source run already succeeded with genuine WASM, independently
+          # audited fixtures, JS/WASM SHA, and offline Chromium (8/8).
+          SOURCE_RUN=44235028475
+          assert SOURCE_RUN > 0
+          print('Using immutable successful synthetic proof run:', SOURCE_RUN)
+          PY
+      - name: Download immutable successful genuine offline synthetic HTML proof
+        uses: actions/download-artifact@v4
+        with:
+          name: phase5-genuine-offline-ui-e2e-evidence
+          run-id: 44235028475
+          repository: ${{ github.repository }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          path: received
+      - name: Verify packaging proof is accepted and contains no Safari claim
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(find received -type f -name experimental_full_month_hardship_cp_sat.html | wc -l)" -eq 1
+          test "$(find received -type f -name real_hardship_node_proof.json | wc -l)" -eq 1
+          test "$(find received -type f -name hardship_month_browser_proof.json | wc -l)" -eq 1
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          proof=json.loads(next(Path('received').rglob('real_hardship_node_proof.json')).read_text())
+          browser=json.loads(next(Path('received').rglob('hardship_month_browser_proof.json')).read_text())
+          assert proof['accepted'] is True and proof['contract']=='guard-month-harsh-v4'
+          assert proof['real_iphone_safari_tested'] is False
+          assert proof['operationally_certified'] is False
+          assert browser['accepted'] is True
+          assert browser['real_iphone_safari_verified'] is False
+          assert len(browser['runs'])==2 and all(x['accepted'] for x in browser['runs'])
+          print('Genuine source proof and browser predecessor verified; never claims iPhone acceptance')
+          PY
+      - name: Run genuine C++ WASM in offline desktop and mobile-sized Linux WebKit
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m pip install --disable-pip-version-check playwright==1.58.0
+          html="$(find received -type f -name experimental_full_month_hardship_cp_sat.html)"
+          test -s "$html"
+          python3 tests/browser_month_hardship_wasm.py "$html" --browser webkit
+      - name: Preserve WebKit results and sanitized screenshots on any failure
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: phase5-offline-linux-webkit-cpsat-evidence
+          path: |
+            hardship_month_webkit_proof.json
+            hardship-*-webkit*-failure.png
+          if-no-files-found: warn
