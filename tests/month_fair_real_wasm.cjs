@@ -147,6 +147,7 @@ async function main(){
   full_589_dense_model_tested:true,
   exact_small_fairness_oracle_verified:true,
   rejected_bad_input_cases:badCases.length,
+  fixture_sha256:crypto.createHash('sha256').update(browserFixtureBytes()).digest('hex'),
   cases,elapsed_ms:Date.now()-started,
   js_sha256:crypto.createHash('sha256').update(fs.readFileSync(jsfile)).digest('hex'),
   wasm_sha256:crypto.createHash('sha256').update(binary).digest('hex')
@@ -154,11 +155,8 @@ async function main(){
  fs.writeFileSync(outfile,JSON.stringify(proof,null,2)+'\n');
  console.log(JSON.stringify(proof,null,2));
 }
-if(require.main===module){
- if(process.argv[2]==='--emit-browser-fixtures'){
-  const file=process.argv[3];
-  if(!file)throw Error('Missing synthetic fixture filename');
-  const fixtures=[{id:'tiny',name:'兩名虛構人員：兩班最佳公平',
+function browserFixtureManifest(){
+ const fixtures=[{id:'tiny',name:'兩名虛構人員：兩班最佳公平',
     scenario:tiny(),goals:[1,1],expectedFill:2},
    ...[['door','blackouts-no-hints'],
        ['officer','blackouts-no-hints'],
@@ -168,17 +166,26 @@ if(require.main===module){
       scenario:t,goals:targetsFor(t),
       expectedFill:t.witness.filter(x=>x>=0).length};
    })];
-  const out=fixtures.map(x=>({
+ const out=fixtures.map(x=>({
     id:x.id,name:x.name,year:x.scenario.year,month:x.scenario.month,
     pool:x.scenario.pool,shifts:x.scenario.shiftCount,staff:x.scenario.staff,
     mask:x.scenario.allowed,pins:x.scenario.pins,hints:x.scenario.hints,
     targets:x.goals,expectedFill:x.expectedFill,
     synthetic_only:true
   }));
-  fs.writeFileSync(file,JSON.stringify({contract:'guard-month-fair-v3',
-   source:'synthetic-fixtures-no-real-workforce-data',
-   cases:out},null,2)+'\n');
-  console.log('Exported '+out.length+' synthetic real WASM browser cases');
+ return {contract:'guard-month-fair-v3',
+   source:'synthetic-fixtures-no-real-workforce-data',cases:out};
+}
+function browserFixtureBytes(){
+ return Buffer.from(JSON.stringify(browserFixtureManifest(),null,2)+'\n','utf8');
+}
+if(require.main===module){
+ if(process.argv[2]==='--emit-browser-fixtures'){
+  const file=process.argv[3];
+  if(!file)throw Error('Missing synthetic fixture filename');
+  const bytes=browserFixtureBytes();
+  fs.writeFileSync(file,bytes);
+  console.log('Exported '+browserFixtureManifest().cases.length+' synthetic real WASM browser cases');
  }else{
   main().catch(e=>{console.error('GENUINE FAIRNESS WASM FAILED:',e);
    process.exitCode=1;});
