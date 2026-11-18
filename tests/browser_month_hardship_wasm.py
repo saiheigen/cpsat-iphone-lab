@@ -46,8 +46,10 @@ def run(browser, html: Path, mobile: bool):
             if index:
                 if "請重新執行求解" not in page.locator("#status").inner_text():
                     raise AssertionError("Old case falsely remains approved after selection")
-                if page.locator("#vacancy-details").is_visible() or page.locator("#vacancy-list li").count():
-                    raise AssertionError("Old case vacancy list remained visible")
+                if (page.locator("#vacancy-details").is_visible() or
+                        page.locator("#vacancy-details").get_attribute("open") is not None or
+                        page.locator("#vacancy-list li").count()):
+                    raise AssertionError("Old case vacancy disclosure state remained active")
             page.locator("#run").click(timeout=30000)
             page.wait_for_function(
                 """() => {
@@ -86,6 +88,8 @@ def run(browser, html: Path, mobile: bool):
                     raise AssertionError("Full vacancy list is hidden")
                 if page.locator("#vacancy-list li").count()!=expected_days:
                     raise AssertionError("Grouped vacancy days do not match solver")
+                if details.get_attribute("open") is not None:
+                    raise AssertionError("New vacancy list must start collapsed")
                 page.locator("#vacancy-title").click()
                 if not page.locator("#vacancy-list").is_visible():
                     raise AssertionError("Vacancy details cannot be expanded")
