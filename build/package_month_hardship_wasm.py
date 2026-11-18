@@ -154,6 +154,9 @@ h1{font-size:22px;line-height:1.35}.notice{background:#fff2dc;padding:12px;borde
 select,button{display:block;width:100%;padding:14px;border-radius:10px;font-size:16px}
 button{background:#0d6888;color:white;font-weight:700;border:0;margin-top:14px}
 button:disabled{opacity:.55}label{display:block;margin:15px 0 7px}
+details{padding:9px 11px;border:1px solid #c7d8e4;border-radius:9px;margin:12px 0}
+details summary{cursor:pointer;font-weight:700}details ol{margin:9px 0;padding-left:24px}
+details li{margin:5px 0}
 pre{white-space:pre-wrap;overflow-wrap:anywhere;background:#edf3f8;border-radius:9px;
 padding:13px;font-size:12px}small{display:block;color:#647586;overflow-wrap:anywhere}
 </style></head><body><main>
@@ -167,6 +170,8 @@ padding:13px;font-size:12px}small{display:block;color:#647586;overflow-wrap:anyw
 <button id="run">在本機執行真正 WASM 三階段求解</button>
 <p id="status" role="status">尚未執行</p>
 <section id="summary" aria-live="polite">尚無排班摘要</section>
+<details id="vacancy-details" hidden><summary id="vacancy-title">查看完整缺班清單</summary>
+<ol id="vacancy-list"></ol></details>
 <pre id="output">沒有結果</pre>
 <small>WASM SHA-256：__WASM_SHA__</small>
 </main><script>__GLUE__</script>
@@ -313,10 +318,14 @@ function independentlyAudit(t,res){
 const btn=document.getElementById("run");
 const status=document.getElementById("status"),out=document.getElementById("output");
 const summary=document.getElementById("summary");
+const vacancyDetails=document.getElementById("vacancy-details");
+const vacancyTitle=document.getElementById("vacancy-title");
+const vacancyList=document.getElementById("vacancy-list");
 let runtime=null;
 btn.addEventListener("click",async()=>{
  btn.disabled=true;status.textContent="正在本機執行三階段求解…";
  out.textContent="尚待獨立驗證";summary.textContent="正在計算，尚無已驗證班表";
+ vacancyDetails.hidden=true;vacancyList.replaceChildren();
  await new Promise(ok=>requestAnimationFrame(ok));
  const start=Date.now();
  try{
@@ -335,6 +344,20 @@ btn.addEventListener("click",async()=>{
   const vacancies=got.assignments.flatMap((p,i)=>p===-1?[{day:Math.floor(i/HOURS[t.pool].length)+1,slot:i%HOURS[t.pool].length+1}]:[]);
   if(vacancies.length!==verified.missing)throw Error("缺班清單與獨立驗證不一致");\n  summary.textContent="已排 "+verified.filled+" 班｜缺班 "+verified.missing+" 班"+
     (vacancies.length?"｜缺班位置："+vacancies.slice(0,12).map(v=>v.day+"日第"+v.slot+"班").join("、")+(vacancies.length>12?"…（完整清單見下方）":""):"");
+  const grouped=new Map();
+  for(const v of vacancies){
+   if(!grouped.has(v.day))grouped.set(v.day,[]);
+   const [start,end]=HOURS[t.pool][v.slot-1];
+   grouped.get(v.day).push("第"+v.slot+"班（"+String(start).padStart(2,"0")+":00–"+
+     String(end).padStart(2,"0")+":00）");
+  }
+  vacancyTitle.textContent="查看完整缺班清單（"+vacancies.length+"班／"+grouped.size+"天）";
+  for(const [day,slots] of grouped){
+   const li=document.createElement("li");
+   li.textContent=day+"日："+slots.join("、");
+   vacancyList.appendChild(li);
+  }
+  vacancyDetails.hidden=vacancies.length===0;
   status.textContent="✅ 真正 WASM 三階段合法填班與艱苦公平檢查通過";
   out.textContent=JSON.stringify({accepted:true,scenario:t.id,
    status:got.status,shifts:t.shifts,staff:t.staff,
@@ -352,7 +375,9 @@ btn.addEventListener("click",async()=>{
    real_iphone_safari_verified:false,
    operationally_certified:false},null,2);
  }catch(err){
-  status.textContent="❌ 本機三階段求解／獨立驗證失敗";\n  summary.textContent="未產生可驗證班表，禁止採用結果";
+  status.textContent="❌ 本機三階段求解／獨立驗證失敗";
+  summary.textContent="未產生可驗證班表，禁止採用結果";
+  vacancyDetails.hidden=true;vacancyList.replaceChildren();
   out.textContent=String(err&&err.stack||err);
  }finally{btn.disabled=false;}
 });
