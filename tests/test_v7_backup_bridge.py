@@ -99,9 +99,9 @@ class V7BridgeTests(unittest.TestCase):
         # One person can serve several date ranges; overlapping days are
         # counted ONCE just like v7's Set, even across month boundaries.
         data["global"]["meal"] = (
-            "P001,115/11/30,115/12/02\\n"
-            "P001,115/12/02,115/12/03\\n"
-            "P001,115/12/30,116/01/02\\n"
+            "P001,115/11/30,115/12/02\n"
+            "P001,115/12/02,115/12/03\n"
+            "P001,115/12/30,116/01/02\n"
             "P002,115/11/30,115/11/30"
         )
         x = convert_v7_backup(data)
