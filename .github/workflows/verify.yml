@@ -60,6 +60,10 @@ jobs:
               assert len(c['targets'])==c['staff']
           print('Four synthetic month fair fixtures are valid shapes; NOT actual WASM proof')
           PY
+      - name: Check independent exact night/noon/long-hour v4 WASM oracle input (NOT compiled solver)
+        run: |
+          node --check tests/month_hardship_real_wasm.cjs
+          node tests/month_hardship_real_wasm.cjs --preflight
       - name: Setup Emscripten
         uses: emscripten-core/setup-emsdk@v15
         with:
