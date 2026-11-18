@@ -1,0 +1,83 @@
+# Complete calendar 589-shift model CP-SAT -> real WebAssembly.
+# Synthetic-only input. Does not change the already-proven fixed math probe.
+name: Full-month CP-SAT WebAssembly experiment
+on:
+  workflow_run:
+    workflows: ["Dynamic assignment CP-SAT WebAssembly build"]
+    types: [completed]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  complete-calendar:
+    # Avoid running another expensive OR-Tools compile until the earlier
+    # smaller dynamic WASM target has actually passed its oracle-backed gate.
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.workflow_run.conclusion == 'success' &&
+       github.event.workflow_run.head_repository.full_name == github.repository)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+      - uses: emscripten-core/setup-emsdk@v15
+        with:
+          version: '4.0.12'
+      - name: Install compiler and build tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y cmake ninja-build git python3
+          emcc --version
+          node --version
+      - name: Clone stable OR-Tools source for dynamic library
+        run: |
+          mkdir -p .build
+          git clone --depth 1 --branch stable https://github.com/google/or-tools.git .build/or-tools
+          git -C .build/or-tools rev-parse HEAD | tee .build/upstream_commit.txt
+      - name: Apply reviewed Ninja protoc dependency repair
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          f=Path(".build/or-tools/cmake/host.cmake")
+          s=f.read_text()
+          old="OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/host_tools\n"
+          dep="DEPENDS ${CMAKE_CURRENT_BINARY_DIR}/host_tools\n"
+          new="OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/host_tools/bin/protoc\n"
+          if s.count(old)!=1 or s.count(dep)!=1:
+              raise SystemExit("Upstream changed: do not patch blindly")
+          f.write_text(s.replace(old,new).replace(dep,new.replace("OUTPUT","DEPENDS")))
+          PY
+      - name: Configure complete-calendar CP-SAT WASM dependencies
+        run: |
+          emcmake cmake -S src -B .build/dynamic -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DORTOOLS_SOURCE_DIR="${{ github.workspace }}/.build/or-tools" \
+            -DBUILD_DEPS=ON -DBUILD_CXX=ON \
+            -DBUILD_SHARED_LIBS=OFF -DBUILD_TESTING=OFF \
+            -DBUILD_EXAMPLES=OFF -DBUILD_SAMPLES=OFF \
+            -DBUILD_PYTHON=OFF -DBUILD_JAVA=OFF -DBUILD_DOTNET=OFF \
+            -DUSE_COINOR=OFF -DUSE_GLPK=OFF -DUSE_HIGHS=OFF \
+            -DUSE_PDLP=OFF -DUSE_SCIP=OFF
+      - name: Compile only full-calendar month target (not OR-Tools CLI)
+        run: |
+          cmake --build .build/dynamic --target cp_sat_month_bridge --parallel 4
+          test -s .build/dynamic/cp_sat_month_bridge.js
+          test -s .build/dynamic/cp_sat_month_bridge.wasm
+      - name: Execute full-calendar WASM CP-SAT and independent synthetic rest auditor
+        run: |
+          node tests/month_real_wasm.cjs \
+            .build/dynamic/cp_sat_month_bridge.js \
+            .build/dynamic/cp_sat_month_bridge.wasm \
+            .build/dynamic/full_month_wasm_proof.json
+      - name: Upload only a genuinely verified experimental full-month solver
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: experimental-full-month-cpsat-wasm-with-proof
+          path: |
+            .build/dynamic/cp_sat_month_bridge.js
+            .build/dynamic/cp_sat_month_bridge.wasm
+            .build/dynamic/dynamic_wasm_proof.json
+            .build/upstream_commit.txt
+          include-hidden-files: true
+          if-no-files-found: error
