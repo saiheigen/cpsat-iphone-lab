@@ -377,6 +377,46 @@ def run(browser, html: Path, mobile: bool, engine: str = "chromium",
         recovery["recovered"]=True
         recovery["restart_execution_mode"]=restarted["execution_mode"]
         record["worker_recovery"]=recovery
+        if worker_required:
+            # A longer real WASM job must be cancellable without publishing
+            # a half-computed or stale schedule.
+            page.locator("#scenario").select_option("door-blackouts-no-hints")
+            page.locator("#run").click(timeout=30000)
+            page.wait_for_timeout(700)
+            if not page.locator("#cancel-solve").is_enabled():
+                raise AssertionError("In-progress Worker solve cannot be cancelled")
+            page.locator("#cancel-solve").click(timeout=30000)
+            page.wait_for_function(
+                "() => document.getElementById('status').textContent.includes('計算已取消')",
+                timeout=10000)
+            if (page.locator("#roster-preview").is_visible() or
+                    page.locator("#combined-run").is_enabled() or
+                    page.locator("#roster-days li").count()):
+                raise AssertionError("Cancelled computation published stale roster")
+            if "0 / 4" not in page.locator("#phone-record-count").inner_text():
+                raise AssertionError("Cancelled computation retained old phone evidence")
+            if not page.locator("#run").is_enabled():
+                raise AssertionError("Cancelled Worker left run button disabled")
+            if page.locator("#cancel-solve").is_enabled():
+                raise AssertionError("Cancel button remains active after stopping")
+            page.locator("#scenario").select_option("tiny")
+            page.locator("#run").click(timeout=30000)
+            page.wait_for_function(
+                "() => document.getElementById('status').textContent.includes('檢查通過')",
+                timeout=30000)
+            after_cancel=json.loads(page.locator("#output").inner_text())
+            if (after_cancel.get("accepted") is not True or
+                    after_cancel.get("filled")!=4 or
+                    after_cancel.get("execution_mode")!="dedicated-worker"):
+                raise AssertionError("Worker could not recover after cancellation")
+            record["cancellation"]={
+                "cancelled_real_long_job":True,"stale_result_rejected":True,
+                "subsequent_genuine_worker_solve_passed":True
+            }
+        else:
+            record["cancellation"]={
+                "not_tested_reason":"WebKit offline emulator uses blocking main-thread fallback"
+            }
         if network:
             raise AssertionError("Page sent external HTTP request: "+str(network))
         if errors:
