@@ -9,6 +9,7 @@
 // separately, each must include every calendar shift; NO chunking.
 // Single-threaded, bounded model with strict validation and time limit.
 #include <array>
+#include <cstdlib>
 #include <exception>
 #include <sstream>
 #include <stdexcept>
