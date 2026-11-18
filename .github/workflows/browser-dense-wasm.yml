@@ -55,6 +55,9 @@ jobs:
           test -s "$html" && test -s "$old"
           echo "PROVEN_MONTH_HTML=$html" >> "$GITHUB_ENV"
           echo "PREVIOUS_NODE_BENCHMARK=$old" >> "$GITHUB_ENV"
+          # GITHUB_ENV is only exposed to subsequent steps, not this shell.
+          export PROVEN_MONTH_HTML="$html"
+          export PREVIOUS_NODE_BENCHMARK="$old"
           mkdir -p proof
           node tests/wasm_dense_month_benchmark.cjs --preflight
           node tests/wasm_dense_month_benchmark.cjs \
