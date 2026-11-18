@@ -42,6 +42,24 @@ jobs:
         run: |
           node --check tests/wasm_dense_month_benchmark.cjs
           node tests/wasm_dense_month_benchmark.cjs --preflight
+      - name: Check new full-month fair-count fixture evidence (NOT real WASM)
+        run: |
+          node --check tests/month_fair_real_wasm.cjs
+          node tests/month_fair_preflight.cjs
+          node tests/month_fair_real_wasm.cjs --emit-browser-fixtures synthetic_fair_cases.json
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          manifest=json.loads(Path('synthetic_fair_cases.json').read_text())
+          assert manifest['contract']=='guard-month-fair-v3'
+          cases=manifest['cases']
+          assert len(cases)==4
+          for c in cases:
+              assert c['synthetic_only'] is True
+              assert len(c['mask'])==c['shifts']*c['staff']
+              assert len(c['targets'])==c['staff']
+          print('Four synthetic month fair fixtures are valid shapes; NOT actual WASM proof')
+          PY
       - name: Setup Emscripten
         uses: emscripten-core/setup-emsdk@v15
         with:
