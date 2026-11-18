@@ -44,6 +44,9 @@ class BridgeResult:
     pins: dict[str, str | None]
     weights: dict[str, str]
     carry: dict[str, int]
+    # v7 credits each distinct officer meal-duty calendar day exactly once,
+    # even if the original data has duplicate or overlapping date ranges.
+    meal_credit: dict[str, int] = field(default_factory=dict)
     warnings: list[str] = field(default_factory=list)
     # Critical caveats are explicit rather than silently claiming parity.
     cross_month_confirmed: bool = False
@@ -439,6 +442,23 @@ def convert_v7_backup(data: dict, month: str | None = None) -> BridgeResult:
                 "涉及人數：" + str(len(outstanding)))
         warnings.append("前月補償未直接套用；已使用本月明確的手動補償")
 
+    # v7 build(): officer meal-credit is the number of DISTINCT days
+    # in this calendar month with a meal event, NOT the number of records.
+    # This is fairness accounting only; the hard pre/post-day prohibition
+    # remains handled by native static_reason() above.
+    meal_days = {p.id: set() for p in people if p.pool == "officer"}
+    for event in events:
+        if event.type != "meal":
+            continue
+        if event.person not in meal_days:
+            raise BridgeError("督伙折抵對應的人員不是安官名冊")
+        low, high = max(event.start, first), min(event.end, last)
+        day = low
+        while day <= high:
+            meal_days[event.person].add(day)
+            day += timedelta(days=1)
+    meal_credit = {ident: len(days) for ident, days in meal_days.items()}
+
     # Fail closed on a potentially stale existing schedule, without relying on
     # a Python guess of the application's JavaScript signature algorithm.
     if entries.get("schedule"):
@@ -446,6 +466,7 @@ def convert_v7_backup(data: dict, month: str | None = None) -> BridgeResult:
     return BridgeResult(
         month=month, people=people, tasks=tasks, events=events,
         history=history, pins=pins, weights=weights, carry=carry,
+        meal_credit=meal_credit,
         warnings=warnings, cross_month_confirmed=False,
         compensation_confirmed=not bool(unverified_auto),
         operationally_certified=False,
