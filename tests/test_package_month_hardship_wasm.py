@@ -6,6 +6,7 @@ iPhone Safari support, operational rules or hardship optimum for 589 shifts.
 import hashlib
 import importlib.util
 import json
+import subprocess
 from pathlib import Path
 import tempfile
 import unittest
@@ -103,6 +104,22 @@ class HardshipPackagerGateTests(unittest.TestCase):
         self.assertIn("hardshipScore",page)
         self.assertIn("不能核定班表",page)
         self.assertGreater(self.html.stat().st_size,10000)
+
+    def test_generated_standalone_browser_javascript_is_syntactically_valid(self):
+        # This is only JS syntax checking with a FAKE WASM fixture.
+        # It neither invokes WebAssembly nor verifies real browsers.
+        js,wasm,proof,fixtures=packer.verify(
+            self.js,self.wasm,self.proof,self.fixtures)
+        packer.make(js,wasm,proof,fixtures,self.html)
+        text=self.html.read_text("utf-8")
+        self.assertEqual(text.count("<script>"),2)
+        audit_script=text.split("<script>",2)[2].split("</script>",1)[0]
+        self.assertNotIn("__CASES__",audit_script)
+        result=subprocess.run(["node","--check","-"],input=audit_script,
+                              capture_output=True,text=True,check=False)
+        self.assertEqual(result.returncode,0,result.stderr)
+        self.assertIn("hardshipScore",audit_script)
+        self.assertIn("solve_guard_month_harsh_v4",audit_script)
 
     def test_changed_binary_rejected(self):
         self.wasm.write_bytes(self.wasm.read_bytes()+b"t")
