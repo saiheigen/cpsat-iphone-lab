@@ -38,3 +38,17 @@
 - **真實 iPhone Safari** 的本機 file 開檔、Memory、App 切換後恢復、畫面阻塞、長時間求解、熱與電池都尚未有裝置證據。
 
 下階段建議：先查閱 12 組真正離線瀏覽器密集結果，再實作不犧牲填班數的 C++/WASM 第二階段公平目標；新 C++ 版需獨立編譯、Node 及離線瀏覽器三重驗收。
+
+
+## 瀏覽器驗收補記：12 組實測全部成功
+
+[Dense 589-shift actual offline browser WASM benchmark #2](https://github.com/saiheigen/cpsat-iphone-lab/actions/runs/44214006711)：**completed / success**。這次使用已獨立核對過的、真正來自 C++ OR-Tools 的單檔離線 HTML，在 Linux Playwright Chromium **真實引擎**中以兩種 viewport 進行求解，並把輸出逐班交回 Node `independentlyAudit()` 再檢查，非 JS mock。
+
+- 6 組桌面 Chromium：**6／6 OPTIMAL**，六題整組完成約 **6.112 秒**；單題耗時分別為 2182、1110、1052、351、366、650 ms。
+- 6 組 390×844 手機尺寸＋觸控模擬 Chromium：**6／6 OPTIMAL**，六題整組完成約 **8.264 秒**；單題耗時分別為 3763、1744、1073、355、360、455 ms。
+- **12／12** 回傳完整合法、獨立驗證通過且達到已知最大填班數；**0 組 UNKNOWN**。
+- 測試強制 offline，不允許向外部 HTTP 網址發送請求；未處理 JS 頁面錯誤為零。
+- 這些時間都是 GitHub Linux 上的**瀏覽器引擎**測量；手機尺寸／觸控模擬**不等於** iPhone Safari 的 CPU、RAM、電池或開檔限制。尚未確認真正 iPhone Safari 能否以 `file://` 方式開啟並執行這類 589 班密集工作。
+- 證據 artifact：`verified-real-chromium-offline-dense-wasm`，包含 `browser_dense_raw.json`（12 題真實輸出）與 `browser_dense_audited.json`（獨立逐班稽核結果）。該證據與 GitHub commit 可追溯；後續不能因新模組通過而反向宣稱公平與真實軍務政策已驗收。
+
+本次結論：既有純填班的 C++／WASM 模型，在這六種合成密集情境下不論 Node 或實際桌面／手機尺寸 Chromium **均能完成**；真正的剩餘主瓶頸轉為**完整公平、跨月補償在 C++ 模型中的最佳化，以及 iPhone Safari 實機穩定性**。
