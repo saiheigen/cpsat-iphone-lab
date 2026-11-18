@@ -6,7 +6,6 @@ on:
     paths:
       - '.github/workflows/cp-sat-wasm-dynamic.yml'
       - 'src/cp_sat_assignment_bridge.cc'
-      - 'src/CMakeLists.txt'
       - 'tests/dynamic_assignment_wasm.cjs'
   workflow_dispatch:
 permissions:
