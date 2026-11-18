@@ -28,20 +28,43 @@ def run(browser, html: Path, mobile: bool, engine: str = "chromium"):
                  {"width":1280,"height":800},
         device_scale_factor=3 if mobile else 1,
         is_mobile=mobile,has_touch=mobile,offline=True)
-    page=ctx.new_page()
     network=[]
     errors=[]
-    page.on("request",lambda request:
-            network.append(request.url) if request.url.startswith(
-                ("http://","https://")) else None)
-    page.on("pageerror",lambda err:errors.append(str(err)))
+    def capture_events(p):
+        p.on("request",lambda request:
+             network.append(request.url) if request.url.startswith(
+                 ("http://","https://")) else None)
+        p.on("pageerror",lambda err:errors.append(str(err)))
+    page=ctx.new_page()
+    capture_events(page)
     started=time.monotonic()
     record={"profile":name,"engine":engine,"browser_version":browser.version,
             "physical_iphone":False,"real_iphone_safari":False,
             "offline":True,"cases":[]}
     try:
-        page.goto(html.resolve().as_uri(),wait_until="domcontentloaded",
-                  timeout=90000)
+        if engine=="webkit":
+            # Linux WebKit may reject file:// in its sandbox. Probe separately
+            # and never report a successful in-memory run as a file:// pass.
+            try:
+                page.goto(html.resolve().as_uri(),wait_until="domcontentloaded",
+                          timeout=90000)
+                record["file_url_navigation"]="success"
+                record["page_load_method"]="file_url"
+            except Exception as file_error:
+                record["file_url_navigation"]="failed"
+                record["file_url_error"]=str(file_error).split("\\n",1)[0][:220]
+                page.close()
+                page=ctx.new_page()
+                capture_events(page)
+                page.goto("about:blank",wait_until="domcontentloaded")
+                page.set_content(html.read_text(encoding="utf-8"),
+                                 wait_until="domcontentloaded",timeout=90000)
+                record["page_load_method"]="in_memory_local_html_bytes"
+        else:
+            page.goto(html.resolve().as_uri(),wait_until="domcontentloaded",
+                      timeout=90000)
+            record["file_url_navigation"]="success"
+            record["page_load_method"]="file_url"
         if page.locator("#combined-run").is_enabled() or page.locator("#combined-preview").is_visible():
             raise AssertionError("Unproven two-pool preview already enabled")
         for index,(case,(shift_count,staff,filled)) in enumerate(CASES.items()):
