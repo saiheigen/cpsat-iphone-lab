@@ -115,7 +115,7 @@ class V7BridgeTests(unittest.TestCase):
         from solver.full_month_wire_v2 import export_full_month_v2
         data = fake_backup()
         data["global"]["meal"] = (
-            "P001,115/12/10\\nP001,115/12/10\\nP001,115/12/12"
+            "P001,115/12/10\nP001,115/12/10\nP001,115/12/12"
         )
         bridge = convert_v7_backup(data)
         self.assertEqual(bridge.meal_credit["P001"], 2)
