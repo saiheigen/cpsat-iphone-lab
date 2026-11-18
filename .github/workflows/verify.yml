@@ -25,6 +25,10 @@ jobs:
       - uses: actions/checkout@v4
       - name: Test iPhone packager rejection gates
         run: python3 -m unittest discover -s tests -p 'test_package_iphone.py' -v
+      - name: Syntax-check both dynamic CP-SAT WASM acceptance scripts
+        run: |
+          node --check tests/dynamic_assignment_wasm.cjs
+          node --check tests/month_real_wasm.cjs
       - name: Setup Emscripten
         uses: emscripten-core/setup-emsdk@v15
         with:
