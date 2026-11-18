@@ -1,0 +1,80 @@
+# Reuses an already-proven genuine full-month C++/WASM artifact.
+# No Emscripten compilation. No actual military rosters or member data.
+# BENCHMARK success only means the tests completed and all returned
+# assignments passed independent checks; it never means OPTIMAL.
+name: Dense 589-shift real WASM stress benchmark
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/wasm-dense-month-benchmark.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+  actions: read
+jobs:
+  dense-wasm:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - name: Check out synthetic benchmark and independent auditor
+        uses: actions/checkout@v4
+      - name: Fetch previously verified true C++ CP-SAT WASM (no recompile)
+        uses: actions/download-artifact@v4
+        with:
+          name: experimental-full-month-cpsat-wasm-with-proof
+          run-id: 44206220771
+          repository: ${{ github.repository }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          path: received
+      - name: Enforce unique real-module and proof artifacts
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(find received -type f -name cp_sat_month_bridge.js | wc -l)" -eq 1
+          test "$(find received -type f -name cp_sat_month_bridge.wasm | wc -l)" -eq 1
+          test "$(find received -type f -name full_month_wasm_proof.json | wc -l)" -eq 1
+          js="$(find received -type f -name cp_sat_month_bridge.js)"
+          wasm="$(find received -type f -name cp_sat_month_bridge.wasm)"
+          proof="$(find received -type f -name full_month_wasm_proof.json)"
+          test -s "$js" && test -s "$wasm" && test -s "$proof"
+          echo "MONTH_JS=$js" >> "$GITHUB_ENV"
+          echo "MONTH_WASM=$wasm" >> "$GITHUB_ENV"
+          echo "PRIOR_PROOF=$proof" >> "$GITHUB_ENV"
+      - name: Check SHA and source proof from the original successful WASM run
+        run: |
+          python3 - <<'PY'
+          import os,json,hashlib
+          from pathlib import Path
+          proof=json.loads(Path(os.environ["PRIOR_PROOF"]).read_text())
+          js=Path(os.environ["MONTH_JS"]).read_bytes()
+          wasm=Path(os.environ["MONTH_WASM"]).read_bytes()
+          assert proof["accepted"] is True
+          assert proof["engine"]=="genuine-ORTools-CP-SAT-WASM"
+          assert proof["contract"]=="guard-month-v2"
+          assert proof["synthetic_full_month_shifts_tested"]==589
+          assert proof["synthetic_staff_tested"]==106
+          assert proof["all_operational_rules_tested"] is False
+          assert hashlib.sha256(js).hexdigest()==proof["js_sha256"]
+          assert hashlib.sha256(wasm).hexdigest()==proof["wasm_sha256"]
+          print("Original genuine WASM artifact integrity verified")
+          PY
+      - name: Preflight all six dense witness and strict fictional exclusions
+        run: |
+          node --check tests/wasm_dense_month_benchmark.cjs
+          node tests/wasm_dense_month_benchmark.cjs --preflight
+      - name: Real CP-SAT WASM 589-shift dense input stress and independent audit
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p proof
+          node tests/wasm_dense_month_benchmark.cjs \
+            "$MONTH_JS" "$MONTH_WASM" proof/dense_589_wasm_results.json
+      - name: Publish success/timeout/feasible-vs-optimal evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: verified-real-wasm-dense-589-benchmark
+          path: |
+            proof/dense_589_wasm_results.json
+          if-no-files-found: warn
