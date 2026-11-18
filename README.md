@@ -1,48 +1,24 @@
-# iPhone CP-SAT 單執行緒 WebAssembly 移植實驗
+# iPhone 離線 CP-SAT 排班實驗室
 
-這個私人儲存庫只包含 **Google OR-Tools 的公開程式碼建置腳本與虛構數學題**。請勿上傳真實哨務、軍中人員或其他敏感資料。
+> **私人實驗專案，尚非可核發的正式軍務班表系統。** 本儲存庫只應包含公開 OR-Tools 建置程式、虛構人員與合成勤務案例。勿上傳真實名冊、休假、夜查、車勤、值勤矩陣或其他敏感資料到 GitHub／Actions。
 
-## 目前驗收標準
+## 先看哪份資料？
 
-- GitHub Actions 以 Emscripten 編譯真正 OR-Tools CP-SAT C++ 模型
-- 產物為 `cp_sat_probe.js` 與 `cp_sat_probe.wasm`
-- 在 Node.js **實際載入該 WASM** 並呼叫 `run_cp_sat_probe`
-- 必須回報 `OPTIMAL`、`desks=0`、`tables=3`、`profit=90`
-- 結果由獨立枚舉器複核
-- **只有所有步驟通過**，GitHub Actions 才上傳求解器成品
+- **唯一當前狀態：** [STATUS.md](STATUS.md)
+- **完整工程健檢與精簡順序：** [2026-11-18 專案審查](docs/project-audit-and-simplification-2026-11-18.md)
+- **工作分支：** `phase20-budget-safe-rollover`，尚未合併至 `main`；既有 [draft PR #1](https://github.com/saiheigen/cpsat-iphone-lab/pull/1) 的分支仍較舊。
 
-## 編譯紀錄
+## 已有什麼？
 
-[前往 Actions](https://github.com/saiheigen/cpsat-iphone-lab/actions/workflows/cp-sat-wasm-experimental.yml)
+1. **真正的 OR-Tools C++ CP-SAT WASM**：`src/cp_sat_month_hardship_bridge.cc` 為完整月份 v4 合成模型，三階段依序處理合法填班、總班數公平、艱苦勤務；經 Node／瀏覽器虛構案例實測，不等於真實軍務合規。
+2. **離線手機測試頁**：`build/package_month_hardship_wasm.py`、`src/phase5_hardship_worker.js` 和 `src/phase5_iphone_selfcheck.js`。使用者回報在 iPhone Files 內嵌檢視器成功測試四組虛構案例；**未獨立驗證 Safari.app**。
+3. **規則與完整月份輸入**：`solver/roster_cp_sat.py`、`solver/full_month_wire_v2.py`、`solver/full_month_fair_wire_v3.py`、`solver/v7_backup_bridge.py`。只實作可核對的部分 v7 規則；原始完整 v7 HTML 不在此儲存庫。
+4. **階段 20–24 的本機合成實驗**：跨月封存／補償、跨月勤務稽核、匿名 solver 格式、合法預排與公平改善。文件記載 121 項本機測試通過；不是正式 v7 全規則，也不是這份 README 更新時重跑的 CI。
 
-注意：工作流程顯示綠燈只代表上述 **虛構小題在 GitHub 執行成功**，還不代表 iPhone HTML Viewer 能夠啟動，更不代表整月 589 班模型已經完成全域最優證明。
+## 現階段最重要的限制
 
-## 檔案
+- 密集候選月份使用目前 10 秒第一階段上限，CP-SAT 可能回傳 `UNKNOWN`；**不能把合格預排草案宣稱為真正求解器已完成的班表**。
+- 來源封存 `inputSig`、完整跨月規則、授權核定、正式匯出、本地保管及所有原始 v7.0 規則一致性尚未驗證。
+- 工作分支包含多個舊編譯、打包和瀏覽器工作流程；**修改某些程式仍可能自動觸發 GitHub Actions**。預算與阻擋超額使用必須在個人 GitHub Billing 設定確認；不會因 README 更新而自動調整。
 
-- `src/cp_sat_probe.cc`：真正 CP-SAT C++ 模型
-- `src/CMakeLists.txt`：單執行緒 Emscripten 封裝
-- `build/real_solver_smoke.cjs`：在 Node.js 載入真正 WASM 並驗證結果
-- `.github/workflows/cp-sat-wasm-experimental.yml`：自動建置與測試
-
-不含任何真實排班資料；尚未與 v7.0 主程式整合。
-
-## 自動產生 iPhone 單檔驗收頁
-
-最新已新增 `.github/workflows/iphone-html-after-cpsat.yml`：當前一個真正 CP-SAT 編譯工作**成功**，並上傳經驗證的 JS/WASM 後，會自動下載該產物，再次執行 CP-SAT 真實求解及獨立枚舉驗證，檢查 WASM 無共享記憶體，才輸出：
-
-`iPhone_CP-SAT_真正求解驗收.html`
-
-[查看自動封裝執行紀錄](https://github.com/saiheigen/cpsat-iphone-lab/actions/workflows/iphone-html-after-cpsat.yml)
-
-> 編譯失敗時不會產生手機驗收頁。就算產生，也仍需 iPhone HTML Viewer 實際測試，且暫時只處理虛構的二變數小題，不是 589 班整月模型。
-
-
-## 基礎診斷工作流程（2026-11-17 新增）
-
-另外提供 [iPhone WASM baseline and native CP-SAT](https://github.com/saiheigen/cpsat-iphone-lab/actions/workflows/verify.yml) 工作流程：
-
-- `wasm-baseline`：產生 `iphone_smoke.html`，測試 Emscripten 產生的**真正** WASM 能否在 iPhone HTML Viewer 以單檔啟動。**只測算術函數，不是 CP-SAT**。
-- `native-cpsat`：在 GitHub Linux 主機跑官方 OR-Tools CP-SAT，確認求解與 OPTIMAL。**不是 WASM / iPhone 驗收**。
-- [真正 CP-SAT WASM 實驗工作流程](https://github.com/saiheigen/cpsat-iphone-lab/actions/workflows/cp-sat-wasm-experimental.yml) 仍然獨立存在；需要其 Node 真實 WASM 求解成功，才可宣稱 CP-SAT WASM smoke test 通過。
-
-目前尚未取得任一 GitHub Action 的實際綠燈驗證，不應以程式提交取代成功證據。
+**工程原則：先驗證 hard rules → 盡量合法填班 → 公平／艱苦勤務 → 獨立稽核 → 人員授權核定。任何階段都不得為了排滿而放寬禁排。**
