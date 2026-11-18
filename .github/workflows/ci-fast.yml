@@ -42,6 +42,7 @@ jobs:
           node --check integration/v4_frame_contract.cjs
           node --check integration/phase5_v7_preview_adapter.cjs
           node --check tests/month_real_wasm.cjs
+          node --check tests/contract_real_wasm_smoke.cjs
           node tests/phase5_synthetic_adapter.test.cjs
           node tests/phase5_v7_preview.test.cjs
       - name: Check fictional-only cross-month arithmetic and status guards
@@ -52,4 +53,5 @@ jobs:
           python3 -m unittest discover -s tests -p 'test_iphone_field_evidence.py' -q
           python3 -m unittest discover -s tests -p 'test_ci_budget_policy.py' -q
           python3 -m unittest discover -s tests -p 'test_v4_wire_contract.py' -q
+          python3 -m unittest discover -s tests -p 'test_cross_language_rule_parity.py' -q
           python3 tools/check_ci_budget.py

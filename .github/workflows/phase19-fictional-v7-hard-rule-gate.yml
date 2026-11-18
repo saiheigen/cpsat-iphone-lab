@@ -78,6 +78,9 @@ jobs:
           PY
           echo "HARD_JS=$js" >> "$GITHUB_ENV"
           echo "HARD_WASM=$wasm" >> "$GITHUB_ENV"
+      - name: Independently check 14 genuine C++ WASM temporal boundary fixtures
+        run: |
+          node tests/contract_real_wasm_smoke.cjs "$HARD_JS" "$HARD_WASM" proof/real_hardship_node_proof.json proof/contract_real_wasm_smoke.json
       - name: Emit entirely invented full-month door/officer prohibition matrices
         run: python scripts/phase19_emit_fictional_months.py
       - name: Solve event-aware invented complete months using genuine WASM
@@ -93,4 +96,5 @@ jobs:
           path: |
             phase19_fictional_rules_proof.json
             proof/real_hardship_node_proof.json
+            proof/contract_real_wasm_smoke.json
           if-no-files-found: warn
