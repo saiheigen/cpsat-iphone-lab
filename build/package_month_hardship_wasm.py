@@ -159,6 +159,10 @@ details summary{cursor:pointer;font-weight:700}details ol{margin:9px 0;padding-l
 details li{margin:5px 0}.roster-day{padding:8px 0;border-bottom:1px solid #dce5ed}
 .roster-day strong{display:block}.roster-day ul{margin:4px 0 8px;padding-left:22px}
 .roster-day li{font-size:14px;line-height:1.5}
+.phone-check{display:flex;align-items:center;gap:8px}
+.phone-check input{width:auto;flex:none}
+#phone-evidence-json{display:block;width:100%;padding:10px;box-sizing:border-box;
+border:1px solid #b4c9d8;border-radius:8px;background:#f5f8fa;font-size:12px}
 pre{white-space:pre-wrap;overflow-wrap:anywhere;background:#edf3f8;border-radius:9px;
 padding:13px;font-size:12px}small{display:block;color:#647586;overflow-wrap:anywhere}
 </style></head><body><main>
@@ -185,6 +189,33 @@ padding:13px;font-size:12px}small{display:block;color:#647586;overflow-wrap:anyw
 <div id="combined-days"></div></details>
 <pre id="combined-output">尚無雙勤務已驗證資料</pre>
 </section>
+<details id="phone-selfcheck"><summary>📱 iPhone Safari 實機自檢與測試紀錄（虛構資料）</summary>
+<p>此處不會自動判定實機通過，也不會傳送資料。請在手機上自行確認瀏覽器和網路狀態；可測試 Worker 並複製結果回傳。</p>
+<label for="phone-open-method">實際使用什麼方式開啟？</label>
+<select id="phone-open-method">
+<option value="unknown">尚未確認</option>
+<option value="physical-safari">實體 iPhone 的 Safari App</option>
+<option value="files-quick-look">iOS 檔案 App 預覽／Quick Look</option>
+<option value="embedded-webview">其他 App 內嵌瀏覽器</option>
+<option value="other-browser">其他瀏覽器或電腦</option>
+</select>
+<label for="phone-network-mode">你手動確認的網路狀態</label>
+<select id="phone-network-mode">
+<option value="unknown">尚未確認</option>
+<option value="all-radios-off">已關閉 Wi-Fi 與行動數據</option>
+<option value="connected">目前仍可上網</option>
+</select>
+<label class="phone-check"><input type="checkbox" id="phone-is-physical"> 我確認目前使用的是實體 iPhone（非模擬器）</label>
+<button id="phone-worker-probe" type="button">檢查本機 WebAssembly 與背景 Worker</button>
+<p id="phone-probe-status" role="status">尚未自檢</p>
+<p id="phone-record-count">0 / 4 情境已記錄</p>
+<button id="phone-generate-evidence" type="button">產生不含班表與姓名的測試紀錄</button>
+<button id="phone-copy-evidence" type="button">複製測試紀錄</button>
+<p id="phone-evidence-status" role="status">請先完成所需虛構情境，再產生紀錄。</p>
+<label for="phone-evidence-json">可自行複製的 JSON 測試紀錄</label>
+<textarea id="phone-evidence-json" rows="9" readonly spellcheck="false" aria-label="本機測試紀錄"></textarea>
+<small>紀錄只在本機顯示；沒有資料上傳。手動填寫與瀏覽器提示不能取代獨立 iPhone Safari 驗收。</small>
+</details>
 <pre id="output">沒有結果</pre>
 <small>WASM SHA-256：__WASM_SHA__</small>
 </main><script id="phase5-wasm-glue">__GLUE__</script>
@@ -604,6 +635,7 @@ combinedBtn.addEventListener("click",()=>{
   combinedOutput.textContent=String(e&&e.message||e);
  }
 });
+__IPHONE_SELF_CHECK__
 </script></body></html>"""
 
 
@@ -614,7 +646,11 @@ def make(js, wasm_b64, proof, fixtures, out):
     worker_script=(Path(__file__).resolve().parents[1] / "src" /
                    "phase5_hardship_worker.js").read_text("utf-8")
     worker_safe=json.dumps(worker_script,ensure_ascii=False).replace("&",r"\u0026").replace("<",r"\u003c").replace(">",r"\u003e")
+    phone_script=(Path(__file__).resolve().parents[1] / "src" /
+                  "phase5_iphone_selfcheck.js").read_text("utf-8")
+    phone_script=re.sub(r"</script",r"<\\/script",phone_script,flags=re.IGNORECASE)
     text = (HTML.replace("__GLUE__", js)
+            .replace("__IPHONE_SELF_CHECK__",phone_script)
             .replace("__WORKER_BOOTSTRAP__",worker_safe)
             .replace("__WASM_PARTS__", " +\n".join(json.dumps(x) for x in chunks))
             # JSON is inside a script element: escape HTML/script breakers
