@@ -79,6 +79,8 @@ jobs:
         run: python -m unittest discover -s tests -p 'test_package_dynamic_assignment.py' -v
       - name: Check complete 589-shift month wire serialization and historical availability
         run: python -m unittest discover -s tests -p 'test_full_month_wire_v2.py' -v
+      - name: Verify proof-gated full-month offline HTML packager (fake fixture only)
+        run: python -m unittest discover -s tests -p 'test_package_full_month_wasm.py' -v
       - name: Run real native CP-SAT OPTIMAL test (NOT WASM)
         run: python tests/native_cpsat.py | tee native_cpsat_result.json
       - name: Upload native CP-SAT evidence
