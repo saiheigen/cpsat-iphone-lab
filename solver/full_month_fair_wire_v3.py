@@ -19,6 +19,45 @@ from solver.full_month_wire_v2 import (
 
 VERSION = "guard-month-fair-v3"
 
+def fair_people_from_v7_bridge(bridge, pool: str) -> list[FairPerson]:
+    """Explicit local handoff of v7 weights, manual carry and meal credits.
+
+    The original v7 backup adapter returns *raw* events and manual carry;
+    constructing FairPerson(id) alone would silently DROP each officer's
+    meal-credit offset. No staffing IDs or duty information leave the local
+    application. The returned targets remain unverified for operational use.
+    """
+    from math import isfinite
+    from solver.v7_backup_bridge import BridgeResult
+    if not isinstance(bridge, BridgeResult) or pool not in ("door", "officer"):
+        raise ValueError("Expected a locally validated v7 bridge and duty pool")
+    people = [p for p in bridge.people if p.pool == pool]
+    if not people:
+        raise ValueError("No personnel in requested v7 duty pool")
+    known = {p.id for p in bridge.people}
+    if (set(bridge.weights) - known or set(bridge.carry) - known or
+            set(bridge.meal_credit) - known):
+        raise ValueError("Unknown staff identifier in v7 fairness inputs")
+    result = []
+    for p in people:
+        try:
+            w = float(bridge.weights.get(p.id, "1"))
+        except (ValueError, TypeError, OverflowError) as exc:
+            raise ValueError("Invalid v7 business weight") from exc
+        if not isfinite(w) or w <= 0:
+            raise ValueError("Invalid v7 business weight")
+        carry = bridge.carry.get(p.id, 0)
+        meal = bridge.meal_credit.get(p.id, 0)
+        if (type(carry) is not int or carry < 0 or
+                type(meal) is not int or meal < 0):
+            raise ValueError("Invalid v7 carry or meal credit")
+        if pool == "door" and meal != 0:
+            raise ValueError("Officer meal credit incorrectly assigned to guard")
+        result.append(FairPerson(p.id, weight=w, carry=carry,
+                                 meal_credit=meal))
+    return result
+
+
 
 def export_full_month_fair_v3(encoded_v2: dict, people: list[FairPerson]) -> dict:
     validated = validate_full_month_v2_export(encoded_v2)
