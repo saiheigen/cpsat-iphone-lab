@@ -17,6 +17,13 @@ on:
 permissions:
   contents: read
 
+# During active engineering, many closely spaced commits share the same
+# verification scope. Avoid burning runner minutes compiling obsolete
+# baseline runs; keep only the newest complete commit under test.
+concurrency:
+  group: baseline-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   wasm-baseline:
     runs-on: ubuntu-24.04
