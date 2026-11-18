@@ -120,6 +120,17 @@ class HardshipPackagerGateTests(unittest.TestCase):
         self.assertEqual(result.returncode,0,result.stderr)
         self.assertIn("hardshipScore",audit_script)
         self.assertIn("solve_guard_month_harsh_v4",audit_script)
+        self.assertIn("phone-selfcheck",text)
+        self.assertIn("phase5-synthetic-iphone-selfcheck-v1",audit_script)
+        self.assertIn("physical_iphone_safari_verified:false",audit_script)
+        self.assertNotIn("__IPHONE_SELF_CHECK__",audit_script)
+        phone=SCRIPT.parents[1]/"src"/"phase5_iphone_selfcheck.js"
+        self.assertTrue(phone.is_file())
+        checker=subprocess.run(["node","--check",str(phone)],
+                               capture_output=True,text=True,check=False)
+        self.assertEqual(checker.returncode,0,checker.stderr)
+        self.assertNotIn("fetch(",phone.read_text("utf-8"))
+        self.assertNotIn("localStorage",phone.read_text("utf-8"))
         self.assertIn("dedicated-worker",audit_script)
         self.assertIn("WORKER_BOOTSTRAP=",audit_script)
         self.assertNotIn("__WORKER_BOOTSTRAP__",audit_script)
