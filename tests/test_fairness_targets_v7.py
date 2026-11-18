@@ -64,7 +64,11 @@ class V7FairnessParityTests(unittest.TestCase):
         avail = {"A": 3, "B": 3}
         targets = actual_targets_v7(
             people, avail, 8, {"A": 4, "B": 4})
-        self.assertEqual(targets, {"A": 0, "B": 4})
+        # v7 prioritizes no-credit staff, but a compensated person can
+        # receive duties when everyone else is already at their static cap.
+        # B's *base* target 4 exceeds static capacity 3, so it stays 4.
+        # Remaining duties are assigned back to A until A reaches cap 3.
+        self.assertEqual(targets, {"A": 3, "B": 4})
         self.assertLess(sum(targets.values()), 8)
 
     def test_debts_are_never_automatically_pursued(self):
