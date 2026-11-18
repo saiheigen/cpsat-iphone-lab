@@ -1,0 +1,91 @@
+# Produce a synthetic-only standalone offline fair-count WASM page AFTER
+# genuine C++ build, exact Node fairness oracle and independent duty audits.
+# Retain previous v2 browser/Node artifacts unchanged.
+name: Package proven full-month fair CP-SAT WASM demo
+on:
+  workflow_run:
+    workflows: ["Full-month two-stage fair CP-SAT WASM experiment"]
+    types: [completed]
+  workflow_dispatch:
+    inputs:
+      source_run_id:
+        description: "Successful genuine two-stage fair-count WASM run ID"
+        required: true
+        type: string
+permissions:
+  actions: read
+  contents: read
+jobs:
+  proof-gated-fair-demo:
+    if: >-
+      (github.event_name == 'workflow_run' &&
+       github.event.workflow_run.conclusion == 'success' &&
+       github.event.workflow_run.head_repository.full_name == github.repository) ||
+      github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: Fetch only the genuine previous fair-count WASM build and proof
+        uses: actions/download-artifact@v4
+        with:
+          name: experimental-full-month-fair-cpsat-wasm-with-proof
+          run-id: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.id || inputs.source_run_id }}
+          repository: ${{ github.repository }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          path: received
+      - name: Verify binary provenance and run genuine C++ CP-SAT independently again
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(find received -type f -name cp_sat_month_fair_bridge.js | wc -l)" -eq 1
+          test "$(find received -type f -name cp_sat_month_fair_bridge.wasm | wc -l)" -eq 1
+          test "$(find received -type f -name full_month_fair_wasm_proof.json | wc -l)" -eq 1
+          js="$(find received -type f -name cp_sat_month_fair_bridge.js)"
+          wasm="$(find received -type f -name cp_sat_month_fair_bridge.wasm)"
+          old="$(find received -type f -name full_month_fair_wasm_proof.json)"
+          test -s "$js" && test -s "$wasm" && test -s "$old"
+          echo "FAIR_WASM_JS=$js" >> "$GITHUB_ENV"
+          echo "FAIR_WASM_BIN=$wasm" >> "$GITHUB_ENV"
+          mkdir -p proof dist
+          node --check tests/month_fair_real_wasm.cjs
+          node tests/month_fair_preflight.cjs
+          node tests/month_fair_real_wasm.cjs "$js" "$wasm" proof/real_fair_node_proof.json
+          python3 - "$old" proof/real_fair_node_proof.json <<'PY'
+          import json,sys
+          from pathlib import Path
+          old=json.loads(Path(sys.argv[1]).read_text())
+          new=json.loads(Path(sys.argv[2]).read_text())
+          assert old['accepted'] is True and new['accepted'] is True
+          assert old['contract']=='guard-month-fair-v3'
+          assert new['contract']=='guard-month-fair-v3'
+          assert old['wasm_sha256']==new['wasm_sha256']
+          assert old['js_sha256']==new['js_sha256']
+          print('Original and re-executed C++ WASM SHA evidence agree')
+          PY
+      - name: Derive baked-in synthetic-only fair-count cases
+        shell: bash
+        run: |
+          set -euo pipefail
+          node tests/month_fair_real_wasm.cjs \
+            --emit-browser-fixtures proof/synthetic_fair_browser_cases.json
+      - name: Unit-test packaging security guard then bundle standalone HTML
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m unittest discover -s tests -p 'test_package_month_fair_wasm.py' -v
+          python3 build/package_month_fair_wasm.py \
+            "$FAIR_WASM_JS" "$FAIR_WASM_BIN" \
+            proof/real_fair_node_proof.json \
+            proof/synthetic_fair_browser_cases.json \
+            dist/experimental_full_month_fair_cp_sat.html
+          test -s dist/experimental_full_month_fair_cp_sat.html
+      - name: Upload proof-gated real two-stage WASM standalone page
+        uses: actions/upload-artifact@v4
+        with:
+          name: genuine-full-month-fair-cpsat-wasm-offline-demo
+          path: |
+            dist/experimental_full_month_fair_cp_sat.html
+            proof/real_fair_node_proof.json
+            proof/synthetic_fair_browser_cases.json
+          if-no-files-found: error
