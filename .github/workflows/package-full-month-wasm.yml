@@ -1,0 +1,68 @@
+# Package an experimental 589-shift WASM demo ONLY after the actual
+# C++ OR-Tools compile, Node execution and independent audit succeed.
+# Completely synthetic, NOT approved operational duty scheduling.
+name: Package proven full-month CP-SAT WASM demo
+on:
+  workflow_run:
+    workflows: ["Full-month CP-SAT WebAssembly experiment"]
+    types: [completed]
+  workflow_dispatch:
+    inputs:
+      source_run_id:
+        description: "Successful full-month experimental WASM workflow run ID"
+        type: string
+        required: true
+permissions:
+  actions: read
+  contents: read
+jobs:
+  full-month-package:
+    if: >-
+      (github.event_name == 'workflow_run' &&
+       github.event.workflow_run.conclusion == 'success' &&
+       github.event.workflow_run.head_repository.full_name == github.repository) ||
+      github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: Download only the previously real-Node-proven full-month WASM artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: experimental-full-month-cpsat-wasm-with-proof
+          run-id: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.id || inputs.source_run_id }}
+          repository: ${{ github.repository }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          path: received
+      - name: Check unique binary sources and rerun genuine WASM CP-SAT
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(find received -type f -name cp_sat_month_bridge.js | wc -l)" -eq 1
+          test "$(find received -type f -name cp_sat_month_bridge.wasm | wc -l)" -eq 1
+          test "$(find received -type f -name full_month_wasm_proof.json | wc -l)" -eq 1
+          js="$(find received -type f -name cp_sat_month_bridge.js)"
+          wasm="$(find received -type f -name cp_sat_month_bridge.wasm)"
+          prior="$(find received -type f -name full_month_wasm_proof.json)"
+          test -s "$js" && test -s "$wasm" && test -s "$prior"
+          printf 'MONTH_WASM_JS=%s\n' "$js" >> "$GITHUB_ENV"
+          printf 'MONTH_WASM_BINARY=%s\n' "$wasm" >> "$GITHUB_ENV"
+          mkdir -p verified dist
+          node tests/month_fixture_preflight.cjs
+          node tests/month_real_wasm.cjs "$js" "$wasm" verified/real_month_proof.json
+      - name: Produce standalone offline HTML only after actual proof and matching SHA
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 build/package_full_month_wasm.py \
+            "$MONTH_WASM_JS" "$MONTH_WASM_BINARY" \
+            verified/real_month_proof.json dist/experimental_full_month_cp_sat.html
+          test -s dist/experimental_full_month_cp_sat.html
+      - name: Publish verified synthetic-only month test HTML
+        uses: actions/upload-artifact@v4
+        with:
+          name: genuine-589-shift-cpsat-wasm-offline-demo
+          path: |
+            dist/experimental_full_month_cp_sat.html
+            verified/real_month_proof.json
+          if-no-files-found: error
