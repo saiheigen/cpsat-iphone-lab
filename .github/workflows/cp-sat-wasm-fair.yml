@@ -1,0 +1,86 @@
+# NEW lexicographic 589-shift fill-first then fair-count CP-SAT -> real WebAssembly.
+# Synthetic-only input. Does not change the already-proven fixed math probe.
+name: Full-month two-stage fair CP-SAT WASM experiment
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/cp-sat-wasm-fair.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  complete-calendar:
+    # Genuine dynamic assignment run #1 already passed the Node oracle.
+    # Run one full-month compile on workflow revision, rather than one compile
+    # for every earlier concurrent dynamic job completing.
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+      - name: Fail fast on full-month count-fairness transport and synthetic oracle
+        run: |
+          node --check tests/month_fair_real_wasm.cjs
+          node --check tests/month_fair_preflight.cjs
+          node tests/month_fair_preflight.cjs
+      - uses: emscripten-core/setup-emsdk@v15
+        with:
+          version: '4.0.12'
+      - name: Install compiler and build tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y cmake ninja-build git python3
+          emcc --version
+          node --version
+      - name: Clone stable OR-Tools source for dynamic library
+        run: |
+          mkdir -p .build
+          git clone --depth 1 --branch stable https://github.com/google/or-tools.git .build/or-tools
+          git -C .build/or-tools rev-parse HEAD | tee .build/upstream_commit.txt
+      - name: Apply reviewed Ninja protoc dependency repair
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          f=Path(".build/or-tools/cmake/host.cmake")
+          s=f.read_text()
+          old="OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/host_tools\n"
+          dep="DEPENDS ${CMAKE_CURRENT_BINARY_DIR}/host_tools\n"
+          new="OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/host_tools/bin/protoc\n"
+          if s.count(old)!=1 or s.count(dep)!=1:
+              raise SystemExit("Upstream changed: do not patch blindly")
+          f.write_text(s.replace(old,new).replace(dep,new.replace("OUTPUT","DEPENDS")))
+          PY
+      - name: Configure lexicographic fair-count OR-Tools CP-SAT WASM dependencies
+        run: |
+          emcmake cmake -S src -B .build/dynamic -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DORTOOLS_SOURCE_DIR="${{ github.workspace }}/.build/or-tools" \
+            -DBUILD_DEPS=ON -DBUILD_CXX=ON \
+            -DBUILD_SHARED_LIBS=OFF -DBUILD_TESTING=OFF \
+            -DBUILD_EXAMPLES=OFF -DBUILD_SAMPLES=OFF \
+            -DBUILD_PYTHON=OFF -DBUILD_JAVA=OFF -DBUILD_DOTNET=OFF \
+            -DUSE_COINOR=OFF -DUSE_GLPK=OFF -DUSE_HIGHS=OFF \
+            -DUSE_PDLP=OFF -DUSE_SCIP=OFF
+      - name: Compile only standalone 2-phase month fair WASM target (not OR-Tools CLI)
+        run: |
+          cmake --build .build/dynamic --target cp_sat_month_fair_bridge --parallel 4
+          test -s .build/dynamic/cp_sat_month_fair_bridge.js
+          test -s .build/dynamic/cp_sat_month_fair_bridge.wasm
+      - name: Actually execute 2-phase full-month fair-count WASM and independent L1 audits
+        run: |
+          node tests/month_fair_real_wasm.cjs \
+            .build/dynamic/cp_sat_month_fair_bridge.js \
+            .build/dynamic/cp_sat_month_fair_bridge.wasm \
+            .build/dynamic/full_month_fair_wasm_proof.json
+      - name: Publish genuine full-month fair-count WASM only after real tests
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: experimental-full-month-fair-cpsat-wasm-with-proof
+          path: |
+            .build/dynamic/cp_sat_month_fair_bridge.js
+            .build/dynamic/cp_sat_month_fair_bridge.wasm
+            .build/dynamic/full_month_fair_wasm_proof.json
+            .build/upstream_commit.txt
+          include-hidden-files: true
+          if-no-files-found: error
