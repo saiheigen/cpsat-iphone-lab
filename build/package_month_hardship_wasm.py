@@ -441,11 +441,13 @@ function prepareWorker(){
     }
    };
    w.onerror=event=>{
+    if(solverWorker!==w)return;
     if(event&&typeof event.preventDefault==="function")event.preventDefault();
     if(!settled)finish(false);
     else disableWorker("Worker runtime error");
    };
    w.onmessageerror=()=>{
+    if(solverWorker!==w)return;
     if(!settled)finish(false);
     else disableWorker("Worker message decoding error");
    };
