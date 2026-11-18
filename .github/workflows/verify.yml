@@ -98,6 +98,8 @@ jobs:
         run: python -m unittest discover -s tests -p 'test_lexicographic_count_fair.py' -v
       - name: Validate new anonymous v3 fair-count target transport and forged-result rejection
         run: python -m unittest discover -s tests -p 'test_full_month_fair_wire_v3.py' -v
+      - name: Verify two-stage fair-count WASM packaging proof gate with fake synthetic fixtures
+        run: python -m unittest discover -s tests -p 'test_package_month_fair_wasm.py' -v
       - name: Run real native CP-SAT OPTIMAL test (NOT WASM)
         run: python tests/native_cpsat.py | tee native_cpsat_result.json
       - name: Upload native CP-SAT evidence
