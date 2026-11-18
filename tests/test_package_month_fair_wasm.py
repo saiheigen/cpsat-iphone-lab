@@ -75,6 +75,11 @@ class FairPackagerGateTests(unittest.TestCase):
             "cases":cases,
         }
         self.save()
+        # Fixture digest is tied to the exact bytes of the synthetic manifest.
+        # Only the initial valid fixture is attested; later tampering fails.
+        self.data["fixture_sha256"] = hashlib.sha256(
+            self.fixtures.read_bytes()).hexdigest()
+        self.save()
 
     def save(self):
         self.proof.write_text(json.dumps(self.data),encoding="utf-8")
@@ -96,6 +101,35 @@ class FairPackagerGateTests(unittest.TestCase):
         self.assertIn("不能核定班表",page)
         self.assertIn(self.data["wasm_sha256"],page)
         self.assertGreater(self.html.stat().st_size,10000)
+
+    def test_reject_browser_fixture_swap_even_with_valid_shapes(self):
+        self.synthetic["cases"][0]["name"] = "a different fictional fixture"
+        self.save()
+        with self.assertRaisesRegex(ValueError, "Browser fixtures do not match"):
+            packer.verify(self.js, self.wasm, self.proof, self.fixtures)
+
+    def test_escape_script_breakout_even_for_proof_attested_fixture(self):
+        # Name is not read from operational data. Still escape if generated
+        # script markup ever contains special characters.
+        attack = "</script><script>window.stolen=1</script>"
+        self.synthetic["cases"][0]["name"] = attack
+        self.save()
+        self.data["fixture_sha256"] = hashlib.sha256(
+            self.fixtures.read_bytes()).hexdigest()
+        self.save()
+        glue,b64,proof,fixtures=packer.verify(
+            self.js,self.wasm,self.proof,self.fixtures)
+        packer.make(glue,b64,proof,fixtures,self.html)
+        page=self.html.read_text("utf-8")
+        self.assertNotIn(attack,page)
+        self.assertNotIn("window.stolen=1</script>",page)
+        self.assertIn(r"\\u003c/script\\u003e",page)
+
+    def test_missing_manifest_digest_rejected(self):
+        self.data.pop("fixture_sha256")
+        self.save()
+        with self.assertRaisesRegex(ValueError, "Browser fixtures do not match"):
+            packer.verify(self.js,self.wasm,self.proof,self.fixtures)
 
     def test_reject_wrong_digest(self):
         self.wasm.write_bytes(self.wasm.read_bytes()+b"tampered")
