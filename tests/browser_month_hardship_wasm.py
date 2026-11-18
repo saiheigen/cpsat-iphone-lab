@@ -65,7 +65,7 @@ def run(browser, html: Path, mobile: bool):
                 if result.get(key)!=expected:
                     raise AssertionError("Incorrect night/noon/long-shift hardship browser field "+
                                          key+": "+text[:500])
-            if result.get("status") not in ("OPTIMAL","FEASIBLE"):
+            vacancies=result.get("vacancies")\n            if (not isinstance(vacancies,list) or\n                    len(vacancies)!=shift_count-filled or\n                    len({(v.get("day"),v.get("slot")) for v in vacancies})!=len(vacancies)):\n                raise AssertionError("Missing or duplicated unfilled-shift list")\n            summary=page.locator("#summary").inner_text()\n            if ("已排 "+str(filled)+" 班" not in summary or\n                    "缺班 "+str(shift_count-filled)+" 班" not in summary):\n                raise AssertionError("Incorrect visible vacancy summary")\n            if result.get("status") not in ("OPTIMAL","FEASIBLE"):
                 raise AssertionError("No legal WASM result")
             if result["final_abs_deviation"]>result["phase1_abs_deviation"]:
                 raise AssertionError("Count fairness worsened baseline")
