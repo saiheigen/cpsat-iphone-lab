@@ -75,6 +75,9 @@ def run(browser, html: Path, mobile: bool, engine: str = "chromium",
                       timeout=90000)
             record["file_url_navigation"]="success"
             record["page_load_method"]="file_url"
+        if (engine=="webkit" and network_policy=="deny-external" and
+                record.get("page_load_method")!="file_url"):
+            raise AssertionError("WebKit file URL must load before Worker proof")
         page.evaluate("""() => {
             let last=performance.now();
             window.__phase5HeartbeatMaxGap=0;
