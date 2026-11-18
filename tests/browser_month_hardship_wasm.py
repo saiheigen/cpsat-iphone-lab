@@ -74,6 +74,21 @@ def run(browser, html: Path, mobile: bool):
             if ("已排 "+str(filled)+" 班" not in summary or
                     "缺班 "+str(shift_count-filled)+" 班" not in summary):
                 raise AssertionError("Incorrect visible vacancy summary")
+            details=page.locator("#vacancy-details")
+            expected_days=len({v["day"] for v in vacancies})
+            if vacancies:
+                if not details.is_visible():
+                    raise AssertionError("Full vacancy list is hidden")
+                if page.locator("#vacancy-list li").count()!=expected_days:
+                    raise AssertionError("Grouped vacancy days do not match solver")
+                shown=details.inner_text()
+                for v in vacancies:
+                    if str(v["day"])+"日：" not in shown:
+                        raise AssertionError("Vacancy day not displayed")
+                    if "第"+str(v["slot"])+"班" not in shown:
+                        raise AssertionError("Vacancy slot not displayed")
+            elif details.is_visible() or page.locator("#vacancy-list li").count():
+                raise AssertionError("Stale vacancy list remains after complete fill")
             if result.get("status") not in ("OPTIMAL","FEASIBLE"):
                 raise AssertionError("No legal WASM result")
             if result["final_abs_deviation"]>result["phase1_abs_deviation"]:
