@@ -65,6 +65,18 @@ def run(browser, html: Path, mobile: bool, engine: str = "chromium"):
                       timeout=90000)
             record["file_url_navigation"]="success"
             record["page_load_method"]="file_url"
+        page.evaluate("""() => {
+            let last=performance.now();
+            window.__phase5HeartbeatMaxGap=0;
+            window.__phase5HeartbeatCount=0;
+            window.__phase5HeartbeatTimer=setInterval(()=>{
+                const now=performance.now();
+                window.__phase5HeartbeatMaxGap=Math.max(
+                    window.__phase5HeartbeatMaxGap,now-last);
+                window.__phase5HeartbeatCount++;
+                last=now;
+            },100);
+        }""")
         if page.locator("#combined-run").is_enabled() or page.locator("#combined-preview").is_visible():
             raise AssertionError("Unproven two-pool preview already enabled")
         for index,(case,(shift_count,staff,filled)) in enumerate(CASES.items()):
@@ -100,6 +112,14 @@ def run(browser, html: Path, mobile: bool, engine: str = "chromium"):
                 if result.get(key)!=expected:
                     raise AssertionError("Incorrect night/noon/long-shift hardship browser field "+
                                          key+": "+text[:500])
+            mode=result.get("execution_mode")
+            if mode not in ("dedicated-worker","main-thread-fallback"):
+                raise AssertionError("Missing true execution mode provenance")
+            if engine=="chromium" and mode!="dedicated-worker":
+                raise AssertionError("Chromium failed to use Web Worker for offline WASM")
+            if (result["elapsed_ms"]>=5000 and mode=="dedicated-worker" and
+                    page.evaluate("window.__phase5HeartbeatMaxGap")>2500):
+                raise AssertionError("Worker solver stalled browser main thread")
             vacancies=result.get("vacancies")
             if (not isinstance(vacancies,list) or
                     len(vacancies)!=shift_count-filled or
@@ -169,6 +189,9 @@ def run(browser, html: Path, mobile: bool, engine: str = "chromium"):
                 raise AssertionError("Two-pool preview activation not proof-gated")
             record["cases"].append({
                 "name":case,"filled":result["filled"],
+                "execution_mode":mode,
+                "main_thread_max_heartbeat_gap_ms":round(page.evaluate(
+                    "window.__phase5HeartbeatMaxGap"),2),
                 "phase1_abs_deviation":result["phase1_abs_deviation"],
                 "final_abs_deviation":result["final_abs_deviation"],
                 "fill_phase":result["fill_phase"],"fair_phase":result["fair_phase"],
