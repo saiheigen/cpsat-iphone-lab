@@ -21,13 +21,20 @@ CASES = {
 }
 
 
-def run(browser, html: Path, mobile: bool, engine: str = "chromium"):
+def run(browser, html: Path, mobile: bool, engine: str = "chromium",
+        network_policy: str = "browser-offline"):
     name=("mobile-"+engine+"-emulation" if mobile else "desktop-"+engine)
     ctx=browser.new_context(
         viewport={"width":390,"height":844} if mobile else
                  {"width":1280,"height":800},
         device_scale_factor=3 if mobile else 1,
-        is_mobile=mobile,has_touch=mobile,offline=True)
+        is_mobile=mobile,has_touch=mobile,offline=network_policy=="browser-offline")
+    # Keep the engine online only to allow its internal blob: Worker loader.
+    # Every HTTP(S) request is aborted by Playwright before network egress.
+    # Unlike offline=True, this is NOT airplane-mode simulation.
+    if network_policy=="deny-external":
+        ctx.route("http://**/*",lambda route:route.abort())
+        ctx.route("https://**/*",lambda route:route.abort())
     network=[]
     errors=[]
     def capture_events(p):
@@ -40,7 +47,10 @@ def run(browser, html: Path, mobile: bool, engine: str = "chromium"):
     started=time.monotonic()
     record={"profile":name,"engine":engine,"browser_version":browser.version,
             "physical_iphone":False,"real_iphone_safari":False,
-            "offline":True,"cases":[]}
+            "offline":network_policy=="browser-offline",
+            "network_policy":network_policy,
+            "external_http_blocked_by_routing":network_policy=="deny-external",
+            "cases":[]}
     try:
         if engine=="webkit":
             # Linux WebKit may reject file:// in its sandbox. Probe separately
@@ -115,8 +125,9 @@ def run(browser, html: Path, mobile: bool, engine: str = "chromium"):
             mode=result.get("execution_mode")
             if mode not in ("dedicated-worker","main-thread-fallback"):
                 raise AssertionError("Missing true execution mode provenance")
-            if engine=="chromium" and mode!="dedicated-worker":
-                raise AssertionError("Chromium failed to use Web Worker for offline WASM")
+            if (engine=="chromium" or network_policy=="deny-external") and mode!="dedicated-worker":
+                raise AssertionError("Required dedicated Worker not used under policy "+
+                                     network_policy+" in "+engine)
             if (result["elapsed_ms"]>=5000 and mode=="dedicated-worker" and
                     page.evaluate("window.__phase5HeartbeatMaxGap")>2500):
                 raise AssertionError("Worker solver stalled browser main thread")
@@ -267,6 +278,9 @@ def main():
     parser.add_argument("html",type=Path)
     parser.add_argument("--browser",choices=("chromium","webkit"),default="chromium",
                         help="WebKit is a Linux engine check, not physical iPhone Safari")
+    parser.add_argument("--network-policy",choices=("browser-offline","deny-external"),
+                        default="browser-offline",
+                        help="deny-external blocks all HTTP(S) through routing, but is not airplane mode")
     args=parser.parse_args()
     if not args.html.is_file() or args.html.stat().st_size<100000:
         raise SystemExit("Genuine full-month night/noon/long-shift hardship WASM HTML missing or too small")
@@ -275,13 +289,14 @@ def main():
                  if args.browser=="chromium" else
                  p.webkit.launch(headless=True))
         try:
-            runs=[run(browser,args.html,False,args.browser),
-                  run(browser,args.html,True,args.browser)]
+            runs=[run(browser,args.html,False,args.browser,args.network_policy),
+                  run(browser,args.html,True,args.browser,args.network_policy)]
         finally:
             browser.close()
     report={
         "accepted":all(x["accepted"] for x in runs),
         "browser_engine":args.browser,
+        "network_policy":args.network_policy,
         "linux_engine_only":True,
         "real_offline_chromium_executed":args.browser=="chromium",
         "real_offline_webkit_executed":args.browser=="webkit",
@@ -291,7 +306,9 @@ def main():
         "runs":runs
     }
     report_path=("hardship_month_browser_proof.json" if args.browser=="chromium"
-                 else "hardship_month_webkit_proof.json")
+                 else ("hardship_month_webkit_zero_egress_proof.json"
+                       if args.network_policy=="deny-external"
+                       else "hardship_month_webkit_proof.json"))
     Path(report_path).write_text(
         json.dumps(report,ensure_ascii=False,indent=2)+"\n",
         encoding="utf-8")
