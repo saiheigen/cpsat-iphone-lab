@@ -2,23 +2,18 @@
 # Synthetic-only input. Does not change the already-proven fixed math probe.
 name: Full-month CP-SAT WebAssembly experiment
 on:
-  workflow_run:
-    workflows: ["Dynamic assignment CP-SAT WebAssembly build"]
-    types: [completed]
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/cp-sat-wasm-month.yml'
   workflow_dispatch:
 permissions:
   contents: read
 jobs:
   complete-calendar:
-    # Avoid running another expensive OR-Tools compile until the earlier
-    # smaller dynamic WASM target has actually passed its oracle-backed gate.
-    # Begin with run #3: avoid earlier duplicate full-month builds
-    # from three already-running dynamic experiments. Manual dispatch remains.
-    if: >-
-      github.event_name == 'workflow_dispatch' ||
-      (github.event.workflow_run.conclusion == 'success' &&
-       github.event.workflow_run.run_number >= 3 &&
-       github.event.workflow_run.head_repository.full_name == github.repository)
+    # Genuine dynamic assignment run #1 already passed the Node oracle.
+    # Run one full-month compile on workflow revision, rather than one compile
+    # for every earlier concurrent dynamic job completing.
     runs-on: ubuntu-24.04
     timeout-minutes: 120
     steps:
