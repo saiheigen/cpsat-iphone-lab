@@ -85,6 +85,14 @@ def verify(js_path, wasm_path, proof_path, fixture_path):
                     item["final_cost"] > item["phase1_cost"]):
                 raise ValueError("Dense fair-count solver lost coverage or worsened fairness")
         seen.add(name)
+    # A valid JS/WASM SHA alone does not prove the HTML uses the cases
+    # the genuine Node solver tested. Bind *exact fixture file bytes* to
+    # the independently executed Node acceptance proof.
+    manifest_hash = proof.get("fixture_sha256")
+    if (not isinstance(manifest_hash, str) or
+            not re.fullmatch(r"[0-9a-f]{64}", manifest_hash) or
+            _sha(Path(fixture_path).read_bytes()) != manifest_hash):
+        raise ValueError("Browser fixtures do not match actual Node WASM proof")
     if (fixtures.get("contract") != "guard-month-fair-v3" or
             fixtures.get("source") != "synthetic-fixtures-no-real-workforce-data"):
         raise ValueError("Untrusted or non-synthetic browser fixtures")
@@ -275,7 +283,12 @@ def make(js, wasm_b64, proof, fixtures, out):
     chunks = [wasm_b64[i:i+4096] for i in range(0, len(wasm_b64), 4096)]
     text = (HTML.replace("__GLUE__", js)
             .replace("__WASM_PARTS__", " +\n".join(json.dumps(x) for x in chunks))
-            .replace("__CASES__", json.dumps(fixtures["cases"], ensure_ascii=False))
+            # JSON is inside a script element: escape HTML/script breakers
+            # even when the fixture is tied to a genuine Node proof digest.
+            .replace("__CASES__", json.dumps(fixtures["cases"], ensure_ascii=False)
+                     .replace("&", r"\u0026")
+                     .replace("<", r"\u003c")
+                     .replace(">", r"\u003e"))
             .replace("__WASM_SHA__", proof["wasm_sha256"]))
     target = Path(out)
     target.parent.mkdir(parents=True, exist_ok=True)
