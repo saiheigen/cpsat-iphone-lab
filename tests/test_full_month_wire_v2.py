@@ -147,7 +147,8 @@ class CompleteMonthWireTests(unittest.TestCase):
         self.assertTrue(audited["validated_against_original_rules"])
         self.assertFalse(audited["operationally_certified"])
         self.assertFalse(audited["real_iphone_safari_verified"])
-        self.assertEqual(audited["source"], "WASM_RESPONSE_INDEPENDENTLY_AUDITED")
+        self.assertEqual(audited["source"], "MODEL_RESPONSE_INDEPENDENTLY_AUDITED_NOT_RUNTIME_PROOF")
+        self.assertFalse(audited["actual_wasm_execution_proven"])
 
     def test_corrupted_same_day_hints_fail_even_with_rehashed_payload(self):
         encoded = export_full_month_v2(
@@ -162,6 +163,16 @@ class CompleteMonthWireTests(unittest.TestCase):
         encoded["sha256"] = hashlib.sha256(encoded["payload"].encode("ascii")).hexdigest()
         with self.assertRaisesRegex(ValueError, "Illegal full-month hint"):
             validate_full_month_v2_export(encoded)
+
+    def test_forged_optimal_status_never_proves_partial_best_fill(self):
+        encoded = export_full_month_v2(2026, 12, "door", fictional_people())
+        response = {"status": "OPTIMAL", "assignments": [-1] * 372,
+                    "filled": 0, "missing": 372}
+        checked = audit_full_month_v2_response(encoded, response)
+        self.assertTrue(checked["solver_reported_optimal"])
+        self.assertFalse(checked["max_fill_proven_for_partial_model"])
+        self.assertFalse(checked["actual_wasm_execution_proven"])
+        self.assertEqual(checked["missing"], 372)
 
     def test_bad_wasm_response_is_never_turned_into_roster(self):
         encoded = export_full_month_v2(
