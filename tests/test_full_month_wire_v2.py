@@ -10,6 +10,7 @@ import unittest
 from solver.roster_cp_sat import Event, History, Person, Shift
 from solver.full_month_wire_v2 import (
     export_full_month_v2, validate_full_month_v2_export,
+    audit_full_month_v2_response,
 )
 
 
@@ -129,6 +130,94 @@ class CompleteMonthWireTests(unittest.TestCase):
         out = validate_full_month_v2_export(pool)
         self.assertEqual(out["tasks"], 29 * 12)
         self.assertTrue(out["validated"])
+
+    def test_audited_candidate_can_be_rechecked_as_hypothetical_wasm_response(self):
+        # Deliberately synthetic/mock result. The real WASM CI has a
+        # separate Node oracle; this test validates the zero-trust adapter.
+        encoded = export_full_month_v2(
+            2026, 12, "door", fictional_people(), build_hint=True)
+        raw = encoded["payload"].splitlines()
+        indices = list(map(int, raw[6].split(",")))
+        filled = sum(index >= 0 for index in indices)
+        self.assertGreater(filled, 0)
+        audited = audit_full_month_v2_response(
+            encoded, {"status": "FEASIBLE", "assignments": indices,
+                      "filled": filled, "missing": 372 - filled})
+        self.assertEqual(audited["filled"], filled)
+        self.assertTrue(audited["validated_against_original_rules"])
+        self.assertFalse(audited["operationally_certified"])
+        self.assertFalse(audited["real_iphone_safari_verified"])
+        self.assertEqual(audited["source"], "WASM_RESPONSE_INDEPENDENTLY_AUDITED")
+
+    def test_corrupted_same_day_hints_fail_even_with_rehashed_payload(self):
+        encoded = export_full_month_v2(
+            2026, 12, "door", fictional_people())
+        lines = encoded["payload"].splitlines()
+        hints = lines[6].split(",")
+        # Dec 1, 06-08 and 08-10; same person cannot serve both.
+        hints[4] = "0"
+        hints[5] = "0"
+        lines[6] = ",".join(hints)
+        encoded["payload"] = "\n".join(lines) + "\n"
+        encoded["sha256"] = hashlib.sha256(encoded["payload"].encode("ascii")).hexdigest()
+        with self.assertRaisesRegex(ValueError, "Illegal full-month hint"):
+            validate_full_month_v2_export(encoded)
+
+    def test_bad_wasm_response_is_never_turned_into_roster(self):
+        encoded = export_full_month_v2(
+            2026, 12, "door", fictional_people())
+        empty = [-1] * 372
+        for status in ("UNKNOWN", "INFEASIBLE", "MODEL_INVALID", None):
+            with self.assertRaisesRegex(ValueError, "No verified feasible"):
+                audit_full_month_v2_response(
+                    encoded, {"status": status, "assignments": empty,
+                              "filled": 0, "missing": 372})
+        with self.assertRaisesRegex(ValueError, "truncated"):
+            audit_full_month_v2_response(
+                encoded, {"status": "FEASIBLE", "assignments": empty[:-1],
+                          "filled": 0, "missing": 372})
+        with self.assertRaisesRegex(ValueError, "staff index"):
+            audit_full_month_v2_response(
+                encoded, {"status": "FEASIBLE",
+                          "assignments": [True] + empty[1:],
+                          "filled": 1, "missing": 371})
+        with self.assertRaisesRegex(ValueError, "filled count"):
+            audit_full_month_v2_response(
+                encoded, {"status": "FEASIBLE", "assignments": empty,
+                          "filled": True, "missing": 372})
+
+    def test_wasm_response_cannot_assign_ineligible_history_or_pinned_vacancy(self):
+        people = fictional_people()
+        history = [History("H001", Shift("door", d(30, 11), 6))]
+        forced_blank = Shift("door", d(2), 6)
+        encoded = export_full_month_v2(
+            2026, 12, "door", people, history=history,
+            pins={forced_blank.key: None})
+        shifts = {t.key: k for k, t in enumerate(encoded["tasks"])}
+        wrong = [-1] * 372
+        wrong[shifts[Shift("door", d(1), 6).key]] = 0
+        with self.assertRaisesRegex(ValueError, "eligibility"):
+            audit_full_month_v2_response(
+                encoded, {"status": "FEASIBLE", "assignments": wrong,
+                          "filled": 1, "missing": 371})
+        wrong = [-1] * 372
+        wrong[shifts[forced_blank.key]] = 1
+        with self.assertRaisesRegex(ValueError, "Pin not preserved"):
+            audit_full_month_v2_response(
+                encoded, {"status": "FEASIBLE", "assignments": wrong,
+                          "filled": 1, "missing": 371})
+
+    def test_wasm_response_rejects_consecutive_days_even_when_both_eligible(self):
+        encoded = export_full_month_v2(
+            2026, 12, "door", fictional_people())
+        tasks = {t.key: i for i, t in enumerate(encoded["tasks"])}
+        indices = [-1] * len(encoded["tasks"])
+        indices[tasks[Shift("door", d(1), 6).key]] = 0
+        indices[tasks[Shift("door", d(2), 6).key]] = 0
+        with self.assertRaisesRegex(ValueError, "Duty conflict"):
+            audit_full_month_v2_response(
+                encoded, {"status": "FEASIBLE", "assignments": indices,
+                          "filled": 2, "missing": 370})
 
     def test_cannot_mislabel_v2_as_a_verified_wasm_solve(self):
         encoded = export_full_month_v2(2026, 12, "officer", fictional_people())
