@@ -156,7 +156,9 @@ button{background:#0d6888;color:white;font-weight:700;border:0;margin-top:14px}
 button:disabled{opacity:.55}label{display:block;margin:15px 0 7px}
 details{padding:9px 11px;border:1px solid #c7d8e4;border-radius:9px;margin:12px 0}
 details summary{cursor:pointer;font-weight:700}details ol{margin:9px 0;padding-left:24px}
-details li{margin:5px 0}
+details li{margin:5px 0}.roster-day{padding:8px 0;border-bottom:1px solid #dce5ed}
+.roster-day strong{display:block}.roster-day ul{margin:4px 0 8px;padding-left:22px}
+.roster-day li{font-size:14px;line-height:1.5}
 pre{white-space:pre-wrap;overflow-wrap:anywhere;background:#edf3f8;border-radius:9px;
 padding:13px;font-size:12px}small{display:block;color:#647586;overflow-wrap:anywhere}
 </style></head><body><main>
@@ -172,6 +174,8 @@ padding:13px;font-size:12px}small{display:block;color:#647586;overflow-wrap:anyw
 <section id="summary" aria-live="polite">尚無排班摘要</section>
 <details id="vacancy-details" hidden><summary id="vacancy-title">查看完整缺班清單</summary>
 <ol id="vacancy-list"></ol></details>
+<details id="roster-preview" hidden><summary>查看整月虛構班表預覽（不可匯入正式網站）</summary>
+<div id="roster-days"></div></details>
 <pre id="output">沒有結果</pre>
 <small>WASM SHA-256：__WASM_SHA__</small>
 </main><script>__GLUE__</script>
@@ -321,17 +325,21 @@ const summary=document.getElementById("summary");
 const vacancyDetails=document.getElementById("vacancy-details");
 const vacancyTitle=document.getElementById("vacancy-title");
 const vacancyList=document.getElementById("vacancy-list");
+const rosterDetails=document.getElementById("roster-preview");
+const rosterDays=document.getElementById("roster-days");
 let runtime=null;
 select.addEventListener("change",()=>{
  status.textContent="已切換情境，請重新執行求解";
  summary.textContent="尚無這個情境的已驗證結果";
  out.textContent="沒有這個情境的求解結果";
  vacancyDetails.hidden=true;vacancyDetails.open=false;vacancyList.replaceChildren();
+ rosterDetails.hidden=true;rosterDetails.open=false;rosterDays.replaceChildren();
 });
 btn.addEventListener("click",async()=>{
  btn.disabled=true;status.textContent="正在本機執行三階段求解…";
  out.textContent="尚待獨立驗證";summary.textContent="正在計算，尚無已驗證班表";
  vacancyDetails.hidden=true;vacancyDetails.open=false;vacancyList.replaceChildren();
+ rosterDetails.hidden=true;rosterDetails.open=false;rosterDays.replaceChildren();
  await new Promise(ok=>requestAnimationFrame(ok));
  const start=Date.now();
  try{
@@ -365,6 +373,23 @@ btn.addEventListener("click",async()=>{
    vacancyList.appendChild(li);
   }
   vacancyDetails.open=false;vacancyDetails.hidden=vacancies.length===0;
+  const totalSlots=HOURS[t.pool].length;
+  for(let day=1;day<=Math.ceil(t.shifts/totalSlots);day++){
+   const section=document.createElement("section");section.className="roster-day";
+   const title=document.createElement("strong");
+   title.textContent=t.year+"/"+t.month+"/"+day+"（虛構）";
+   const list=document.createElement("ul");
+   for(let slot=1;slot<=totalSlots;slot++){
+    const i=(day-1)*totalSlots+slot-1,p=got.assignments[i];
+    const [start,end]=HOURS[t.pool][slot-1];
+    const li=document.createElement("li");
+    li.textContent="第"+slot+"班 "+String(start).padStart(2,"0")+":00–"+
+      String(end).padStart(2,"0")+":00｜"+(p<0?"缺班":"虛構人員 #"+(p+1));
+    list.appendChild(li);
+   }
+   section.append(title,list);rosterDays.appendChild(section);
+  }
+  rosterDetails.hidden=false;rosterDetails.open=false;
   status.textContent="✅ 真正 WASM 三階段合法填班與艱苦公平檢查通過";
   out.textContent=JSON.stringify({accepted:true,scenario:t.id,
    status:got.status,shifts:t.shifts,staff:t.staff,
@@ -385,6 +410,7 @@ btn.addEventListener("click",async()=>{
   status.textContent="❌ 本機三階段求解／獨立驗證失敗";
   summary.textContent="未產生可驗證班表，禁止採用結果";
   vacancyDetails.hidden=true;vacancyDetails.open=false;vacancyList.replaceChildren();
+ rosterDetails.hidden=true;rosterDetails.open=false;rosterDays.replaceChildren();
   out.textContent=String(err&&err.stack||err);
  }finally{btn.disabled=false;}
 });
