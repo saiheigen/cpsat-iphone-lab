@@ -309,6 +309,74 @@ def run(browser, html: Path, mobile: bool, engine: str = "chromium",
             "worker_probe":probe.get("status"),
             "measured_heartbeat_gap_ms":phone["observed_main_thread_max_gap_ms"]
         }
+        # Synthetic fault-injection: terminate the trusted Worker message
+        # path after READY. The app must fail closed, reset the transferred
+        # WASM state and recover a fresh Worker on the next request.
+        reset=page.locator("#reset-worker")
+        if not reset.is_enabled():
+            raise AssertionError("Cannot reset idle solver Worker")
+        reset.click()
+        if page.locator("#combined-run").is_enabled():
+            raise AssertionError("Old approved combined state survived restart")
+        if page.locator("#roster-days li").count() or page.locator("#combined-days li").count():
+            raise AssertionError("Old roster survived engine restart")
+        if "0 / 4" not in page.locator("#phone-record-count").inner_text():
+            raise AssertionError("Stale local iPhone evidence survived restart")
+        if page.locator("#phone-evidence-json").input_value():
+            raise AssertionError("Stale generated report survived restart")
+        recovery={"reset_cleared_approved_state":True,
+                  "fault_injected":False,"recovered":False}
+        worker_required=engine=="chromium" or network_policy=="deny-external"
+        if worker_required:
+            page.evaluate("""() => {
+              const NativeWorker=window.Worker;
+              let failNextSolve=true;
+              window.Worker=function(...args){
+                const worker=new NativeWorker(...args);
+                const post=worker.postMessage.bind(worker);
+                worker.postMessage=function(payload,transfers){
+                  if(failNextSolve && payload && payload.type==="solve"){
+                    failNextSolve=false;
+                    setTimeout(()=>worker.dispatchEvent(new Event("error",
+                      {cancelable:true})),0);
+                    return;
+                  }
+                  return post(payload,transfers);
+                };
+                return worker;
+              };
+              window.Worker.prototype=NativeWorker.prototype;
+            }""")
+            page.locator("#scenario").select_option("tiny")
+            page.locator("#run").click(timeout=30000)
+            page.wait_for_function(
+                "() => document.getElementById('status').textContent.includes('驗證失敗')",
+                timeout=30000)
+            if (page.locator("#roster-preview").is_visible() or
+                    page.locator("#combined-run").is_enabled()):
+                raise AssertionError("Injected Worker crash falsely approved roster")
+            recovery["fault_injected"]=True
+        page.locator("#scenario").select_option("tiny")
+        page.locator("#run").click(timeout=30000)
+        page.wait_for_function(
+            """() => {
+              const status=document.getElementById('status').textContent;
+              return status.includes('檢查通過')||status.includes('驗證失敗');
+            }""",timeout=30000)
+        if "檢查通過" not in page.locator("#status").inner_text():
+            raise AssertionError("Worker restart failed to recover tiny genuine WASM solve: "+
+                                 page.locator("#output").inner_text()[:900])
+        restarted=json.loads(page.locator("#output").inner_text())
+        if (restarted.get("accepted") is not True or
+                restarted.get("filled")!=4 or restarted.get("missing")!=368):
+            raise AssertionError("Restarted Worker did not recover genuine small-case oracle")
+        if worker_required and restarted.get("execution_mode")!="dedicated-worker":
+            raise AssertionError("Worker recovery unexpectedly fell back to blocking main thread")
+        if "1 / 4" not in page.locator("#phone-record-count").inner_text():
+            raise AssertionError("New session did not collect only the restarted result")
+        recovery["recovered"]=True
+        recovery["restart_execution_mode"]=restarted["execution_mode"]
+        record["worker_recovery"]=recovery
         if network:
             raise AssertionError("Page sent external HTTP request: "+str(network))
         if errors:
