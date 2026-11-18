@@ -52,6 +52,10 @@ async function main(){
   const begin=Date.now();
   const got=JSON.parse(engine.ccall('solve_guard_month_harsh_v4',
     'string',['string'],[frame]));
+  if(!['OPTIMAL','FEASIBLE'].includes(got.status)){
+   throw Error('No legal v4 C++/WASM result; fictional pool='+item.pool+
+    ', status='+String(got.status)+', elapsed_ms='+(Date.now()-begin));
+  }
   const result=check(t,targets,got);
   assert(result.filled===got.filled,'Independent JS audit disagrees with solver');
   results.push({pool:item.pool,frame_sha256:item.frame_sha256,
