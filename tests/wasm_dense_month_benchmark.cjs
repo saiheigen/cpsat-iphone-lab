@@ -210,7 +210,19 @@ async function benchmark(jsfile,wasmfile,outfile){
       }))},null,2));
 }
 if(require.main===module){
- if(process.argv[2]==='--preflight'){
+ if(process.argv[2]==='--emit-browser-fixtures'){
+  const outfile=process.argv[3];
+  if(!outfile)throw Error('Missing fixture output JSON path');
+  const scenarios=preflight().cases.map(({pool,variant})=>{
+    const t=createScenario(pool,variant);
+    return {pool,variant,referenceFilled:t.witness.filter(x=>x>=0).length,
+      shifts:t.shiftCount,staff:t.staff,payload:serialize(t)};
+  });
+  fs.writeFileSync(outfile,JSON.stringify({
+    source:'local-fabricated-static-fixture-not-real-workforce',
+    cases:scenarios},null,2)+'\n');
+  console.log('Wrote '+scenarios.length+' synthetic browser cases: '+outfile);
+ }else if(process.argv[2]==='--preflight'){
   try{console.log(JSON.stringify(preflight(),null,2));}
   catch(e){console.error(e);process.exitCode=1;}
  }else{
