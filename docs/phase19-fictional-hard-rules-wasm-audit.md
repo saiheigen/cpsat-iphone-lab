@@ -4,7 +4,7 @@
 
 ## What is actually in the repository
 
-- `solver/phase19_fictional_v7_hard_rules.py` constructs exactly two **hard-coded invented** complete-month scenarios for December 2026: **372 door** and **217 officer** shifts. Invented IDs are `SIM_D_...` and `SIM_O_...`; there is **no arbitrary roster importer**.
+- `solver/phase19_fictional_v7_hard_rules.py` constructs exactly two **hard-coded invented, deliberately sparse-availability** complete-month scenarios for December 2026: **372 door** and **217 officer** shifts. Invented IDs are `SIM_D_...` and `SIM_O_...`; there is **no arbitrary roster importer**.
 - The existing native rule/bridge code (`solver/roster_cp_sat.py`, `solver/full_month_wire_v2.py`, `solver/full_month_fair_wire_v3.py`) builds the full 31-day per-shift/person availability matrix, validates canonical order and pinned shifts, and computes local fictional soft count targets. The generated eight-line `guard-month-harsh-v4` payload intentionally omits names and event text.
 - `tests/test_phase19_fictional_v7_hard_rules.py` independently asserts literal prohibition bits and rejects forged schedules or falsified stage/score flags before any real WASM claims.
 - `scripts/phase19_emit_fictional_months.py` emits only these invented matrices and their SHA-256.
@@ -39,7 +39,15 @@ These checks rely on the existing **partial** native v7-inspired semantics; they
 
 **Operational release gate: BLOCKED.** A synthetic full-month success is evidence of the proposed engineering bridge, not permission to print an actual duty roster.
 
-## Evidence status
+## Verified evidence status (November 18, 2026)
 
-- Native hard-rule and forged-response unit gate: **19/19 tests passed**, workflow #44264855615 native job.
-- Genuine C++/WASM fictional leave/nightcheck/driver/history end-to-end: **requires success conclusion of workflow #44264855615**; do not mark complete solely on upload/compilation.
+- [Complete Phase 19 true-C++/WASM CI #44265577734](https://github.com/saiheigen/cpsat-iphone-lab/actions/runs/44265577734): **completed/success**, both jobs.
+- **19/19** invented hard-rule and forged-response tests passed in the native rule job.
+- The genuinely compiled OR-Tools C++/WASM binary, sourced from the previously attested proof-gated artifact, reran the original reference oracle and passed SHA checks before running the newly compiled fictional eligibility inputs.
+- The **fictional guard pool** had 372 slots, 10 invented personnel, **32 filled / 340 vacant**. The **fictional officer pool** had 217 slots, 8 invented personnel, **9 filled / 208 vacant**.
+- Across both 31-day pools, **41 of 589 staffed; 548 deliberately unfilled**. These are intentional *sparse fictional eligibility windows*: most invented calendar days were marked `exempt_all` to keep the candidate matrix small and prove the rule transport, not to represent real manpower.
+- All returned assignments were reaudited by Python against the original invented events/history/pins, checking the full input SHA, original v2 eligibility source, output counts, changed-stage flags and non-worsening hardship.
+- [Inspect synthetic independent audit evidence](https://github.com/saiheigen/cpsat-iphone-lab/actions/runs/44265577734/artifacts/14410336165). The result is **not** equivalent to the separate original 577/589 browser demo; that earlier fixture has different invented staffing and availability.
+- The first dense prototype CI #44264699297 and its diagnostic rerun #44265336798 failed safely: the guard model had too many highly symmetric eligible candidates and first-stage CP-SAT returned `UNKNOWN` within its 10-second search budget. No invalid schedule was accepted. Reducing the **fictional test** candidate windows, without relaxing any prohibition, made the source-to-solver acceptance deterministic.
+
+**Acceptance scope:** The new chain has passed complete-month **hard-exclusion transport** and independently audited genuine WASM **feasibility** on these two invented sparse cases. It has **not** established full original v7.0 behavior, cross-month archive freshness, real personnel input, actual duty approval, iPhone Safari.app identity or mathematical optimality of all fairness stages.
