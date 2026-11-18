@@ -1,6 +1,6 @@
 # Linux WebKit with genuine proof-gated WASM; uses current branch Worker/HTML.
 # WebKit ≠ physical iPhone Safari. Only fictional scenarios.
-name: Phase 5 real offline WebKit Worker and WASM acceptance
+name: Phase 5 WebKit airplane-mode and zero-egress Worker acceptance
 on:
   pull_request:
     paths:
@@ -79,12 +79,17 @@ jobs:
             proof/synthetic_hardship_browser_cases.json \
             dist/experimental_full_month_hardship_cp_sat.html
           test -s dist/experimental_full_month_hardship_cp_sat.html
-      - name: Run offline desktop and mobile-sized Linux WebKit Worker and real WASM
+      - name: Preserve strict Playwright offline-emulation regression (may need blocking fallback)
         shell: bash
         run: |
           set -euo pipefail
           python3 -m pip install --disable-pip-version-check playwright==1.58.0
-          python3 tests/browser_month_hardship_wasm.py dist/experimental_full_month_hardship_cp_sat.html --browser webkit
+          python3 tests/browser_month_hardship_wasm.py dist/experimental_full_month_hardship_cp_sat.html --browser webkit --network-policy browser-offline
+      - name: Prove genuine nonblocking WebKit Worker with zero external HTTP egress
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 tests/browser_month_hardship_wasm.py dist/experimental_full_month_hardship_cp_sat.html --browser webkit --network-policy deny-external
       - name: Preserve synthetic offline page and inspectable browser evidence
         if: always()
         uses: actions/upload-artifact@v4
@@ -95,5 +100,6 @@ jobs:
             proof/real_hardship_node_proof.json
             proof/synthetic_hardship_browser_cases.json
             hardship_month_webkit_proof.json
+            hardship_month_webkit_zero_egress_proof.json
             hardship-*-webkit*-failure.png
           if-no-files-found: warn
