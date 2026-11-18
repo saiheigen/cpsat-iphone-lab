@@ -41,8 +41,13 @@ def run(browser, html: Path, mobile: bool):
     try:
         page.goto(html.resolve().as_uri(),wait_until="domcontentloaded",
                   timeout=90000)
-        for case,(shift_count,staff,filled) in CASES.items():
+        for index,(case,(shift_count,staff,filled)) in enumerate(CASES.items()):
             page.locator("#scenario").select_option(case)
+            if index:
+                if "請重新執行求解" not in page.locator("#status").inner_text():
+                    raise AssertionError("Old case falsely remains approved after selection")
+                if page.locator("#vacancy-details").is_visible() or page.locator("#vacancy-list li").count():
+                    raise AssertionError("Old case vacancy list remained visible")
             page.locator("#run").click(timeout=30000)
             page.wait_for_function(
                 """() => {
