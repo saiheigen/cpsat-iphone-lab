@@ -12,12 +12,12 @@ jobs:
   complete-calendar:
     # Avoid running another expensive OR-Tools compile until the earlier
     # smaller dynamic WASM target has actually passed its oracle-backed gate.
-    # Target run #3 to avoid launching three costly duplicate month builds
+    # Begin with run #3: avoid earlier duplicate full-month builds
     # from three already-running dynamic experiments. Manual dispatch remains.
     if: >-
       github.event_name == 'workflow_dispatch' ||
       (github.event.workflow_run.conclusion == 'success' &&
-       github.event.workflow_run.run_number == 3 &&
+       github.event.workflow_run.run_number >= 3 &&
        github.event.workflow_run.head_repository.full_name == github.repository)
     runs-on: ubuntu-24.04
     timeout-minutes: 120
