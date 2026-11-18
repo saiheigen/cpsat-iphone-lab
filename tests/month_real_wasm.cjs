@@ -153,5 +153,10 @@ async function main(){
  fs.writeFileSync(outfile,JSON.stringify(proof,null,2)+'\n');
  console.log(JSON.stringify(proof,null,2));
 }
-main().catch(e=>{console.error('Genuine full-month WASM acceptance FAILED:',e);
- process.exitCode=1;});
+// Export pure synthetic fixture/auditor helpers so CI can inspect the
+// complete 589-shift reference BEFORE a costly Emscripten build.
+module.exports={monthFixture,sparseFixture,serialize,independentlyAudit,daysInMonth};
+if(require.main===module){
+ main().catch(e=>{console.error('Genuine full-month WASM acceptance FAILED:',e);
+  process.exitCode=1;});
+}
