@@ -60,6 +60,26 @@ Verify for each result:
 
 **Fail closed:** Any failed case, unexpected script error, hidden missing shift, browser crash, unresolved loading method, or uncertain browser identity leaves physical-Safari acceptance **PENDING/FAILED**. Retest after a fix. Screenshots must only show synthetic data. This test does **not** certify a military operational roster or full absence/vehicle/inspection rules.
 
+## New on-device self-check and copyable report (2026-11-18)
+
+The verified fictional standalone HTML now includes a collapsed **「📱 iPhone Safari 實機自檢與測試紀錄」** panel. It needs no account, no network calls, no names and no imported duty data. The generated JSON stays on the device until the user explicitly copies or shares it. It intentionally excludes all raw assignment arrays and eligibility masks.
+
+Suggested real-device procedure:
+
+1. On the physical iPhone, sign in to GitHub and open the latest **successful** `Phase 5 genuine offline UI end-to-end acceptance` workflow run; download `phase5-genuine-offline-ui-e2e-evidence`, then unpack `experimental_full_month_hardship_cp_sat.html` using Files.
+2. **Confirm the browser actually displaying the page.** Opening HTML from Files may use Quick Look or an embedded viewer rather than Safari. If Safari cannot open the file, do not call Quick Look a Safari test. Do not enable GitHub Pages or publicly host this private-repository experiment without an explicit separate deployment decision.
+3. Open the self-check panel and select the actual opening method. Only select **「實體 iPhone 的 Safari App」** when you verified the Safari app; otherwise select Quick Look, embedded viewer, or unknown. Tick the physical-device confirmation only if true.
+4. With Wi-Fi and cellular data both off if testing real network loss (do not infer this from `navigator.onLine`), select the matching manual network state. Tap **「檢查本機 WebAssembly 與背景 Worker」** and note `ready`, `error` or `unavailable`.
+5. Run four synthetic cases as available, inspect each `execution_mode` and `elapsed_ms`, and combine the two proven month pools. The self-check panel automatically records only their non-sensitive outcome metrics and the synthetic combined **589 / 577 / 12** counts.
+6. Tap **「產生不含班表與姓名的測試紀錄」**, review the local JSON and use **「複製測試紀錄」**. If clipboard access fails (common for some local-file contexts), the textarea is selected for manual Copy.
+7. Share only the resulting fictional JSON and observed browser-loading behavior. Never upload actual military personnel, availability, patrol or approved schedules to a public repository or into the diagnostic report.
+
+The report format is `phase5-synthetic-iphone-selfcheck-v1`. Its `manually_selected_open_method` and `manual_physical_iphone_confirmation` are **self-reported**, and `browser_identity_independently_verified=false`, `physical_iphone_safari_verified=false`, `operationally_certified=false` remain false even after a user selects Safari. They are never automatically promoted based on the user agent or a simulated browser. Actual real-device acceptance requires separate review of the user's observations.
+
+The heartbeat metric (`observed_main_thread_max_gap_ms`) includes this tab's foreground runtime and is not a battery, memory or guaranteed interactive latency benchmark; backgrounding/suspending the tab makes it less comparable. A `dedicated-worker` solve result plus a `ready` basic Worker self-check helps narrow a problem, but does not certify every iOS variant.
+
+**Privacy:** The GitHub repository remains private. This stage only updates proof-gated test artifacts; no automatic public deployment is performed.
+
 ## Release decision
 
 - Offline Chromium CI: require a green `Phase 5 genuine offline UI end-to-end acceptance` run.
