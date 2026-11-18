@@ -124,6 +124,8 @@ jobs:
         run: python -m unittest discover -s tests -p 'test_package_month_fair_wasm.py' -v
       - name: Independently verify third-stage night/noon/long-hour hardship CP-SAT exact oracles (native only)
         run: python -m unittest discover -s tests -p 'test_hardship_stage_v4.py' -v
+      - name: Verify strict three-stage hardship WASM release gate (FAKE fixture, not solver proof)
+        run: python -m unittest discover -s tests -p 'test_package_month_hardship_wasm.py' -v
       - name: Run real native CP-SAT OPTIMAL test (NOT WASM)
         run: python tests/native_cpsat.py | tee native_cpsat_result.json
       - name: Upload native CP-SAT evidence
