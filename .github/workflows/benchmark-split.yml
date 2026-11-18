@@ -2,11 +2,8 @@
 # Separate pools have disjoint staff and hard constraints in this partial model.
 name: Split CP-SAT 589-shift feasibility benchmark
 on:
-  push:
-    paths:
-      - '.github/workflows/benchmark-split.yml'
-      - 'benchmarks/native_589_split.py'
   workflow_dispatch:
+
 permissions:
   contents: read
 jobs:

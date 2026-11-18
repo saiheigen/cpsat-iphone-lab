@@ -1,14 +1,7 @@
 name: Phase 5 WebKit Worker origin diagnostics
 on:
-  push:
-    paths:
-      - 'tests/phase5_webkit_worker_origin_probe.py'
-      - '.github/workflows/phase5-webkit-worker-origin-probe.yml'
-  pull_request:
-    paths:
-      - 'tests/phase5_webkit_worker_origin_probe.py'
-      - '.github/workflows/phase5-webkit-worker-origin-probe.yml'
   workflow_dispatch:
+
 permissions:
   contents: read
 jobs:

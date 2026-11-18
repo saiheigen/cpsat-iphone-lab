@@ -3,15 +3,13 @@
 # Completely synthetic, NOT approved operational duty scheduling.
 name: Package proven full-month CP-SAT WASM demo
 on:
-  workflow_run:
-    workflows: ["Full-month CP-SAT WebAssembly experiment"]
-    types: [completed]
   workflow_dispatch:
     inputs:
       source_run_id:
         description: "Successful full-month experimental WASM workflow run ID"
         type: string
         required: true
+
 permissions:
   actions: read
   contents: read

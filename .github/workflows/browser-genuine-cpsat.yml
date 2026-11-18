@@ -3,13 +3,6 @@
 # Test is synthetic and never downloads/receives personnel or duty records.
 name: Offline browser acceptance of genuine CP-SAT WASM
 on:
-  push:
-    paths:
-      - '.github/workflows/browser-genuine-cpsat.yml'
-      - 'tests/browser_real_cpsat.py'
-  workflow_run:
-    workflows: ["Package proven CP-SAT WASM for iPhone"]
-    types: [completed]
   workflow_dispatch:
     inputs:
       source_run_id:
@@ -36,7 +29,7 @@ jobs:
     env:
       # For initial push use the *already verified* existing packaging run.
       # Subsequent successful packaging runs are tested automatically.
-      ARTIFACT_RUN: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.id || (github.event_name == 'workflow_dispatch' && inputs.source_run_id) || '44136847953' }}
+      ARTIFACT_RUN: ${{ inputs.source_run_id }}
     steps:
       - uses: actions/checkout@v4
       - name: Download the previously Node-verified genuine offline HTML

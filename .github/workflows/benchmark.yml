@@ -1,11 +1,8 @@
 # Diagnostic benchmark: entirely synthetic; no operational information.
 name: Native CP-SAT 589-shift synthetic benchmark
 on:
-  push:
-    paths:
-      - '.github/workflows/benchmark.yml'
-      - 'benchmarks/native_589.py'
   workflow_dispatch:
+
 permissions:
   contents: read
 jobs:

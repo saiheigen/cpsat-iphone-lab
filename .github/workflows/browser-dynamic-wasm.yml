@@ -3,15 +3,13 @@
 # No real personnel, rosters or unit duty data. NOT real Safari/iPhone.
 name: Dynamic offline CP-SAT WASM browser acceptance
 on:
-  workflow_run:
-    workflows: ["Package verified dynamic CP-SAT WASM offline demo"]
-    types: [completed]
   workflow_dispatch:
     inputs:
       source_run_id:
         description: "Successful dynamic offline HTML packaging run ID"
         type: string
         required: true
+
 permissions:
   actions: read
   contents: read

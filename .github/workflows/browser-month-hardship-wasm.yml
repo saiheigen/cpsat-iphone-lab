@@ -3,15 +3,13 @@
 # Linux desktop/mobile-sized Chromium is not physical iPhone Safari.
 name: Real offline full-month hardship CP-SAT WASM browser acceptance
 on:
-  workflow_run:
-    workflows: ["Package proven full-month hardship CP-SAT WASM demo"]
-    types: [completed]
   workflow_dispatch:
     inputs:
       source_run_id:
         description: "Successful proof-gated hardship HTML packaging run ID"
         type: string
         required: true
+
 permissions:
   actions: read
   contents: read

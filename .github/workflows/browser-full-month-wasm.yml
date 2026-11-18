@@ -2,15 +2,13 @@
 # Browser is actual offline Chromium, NOT iPhone/Safari hardware validation.
 name: Real offline 589-shift CP-SAT WASM browser acceptance
 on:
-  workflow_run:
-    workflows: ["Package proven full-month CP-SAT WASM demo"]
-    types: [completed]
   workflow_dispatch:
     inputs:
       source_run_id:
         description: "Successful month HTML packaging workflow run ID"
         type: string
         required: true
+
 permissions:
   actions: read
   contents: read

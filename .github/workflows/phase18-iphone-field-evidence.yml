@@ -1,17 +1,8 @@
 # Synthetic fixture-only schema gate; NEVER upload physical device reports to CI.
 name: Phase 18 synthetic iPhone field evidence privacy gate
 on:
-  push:
-    paths:
-      - 'tools/validate_iphone_field_evidence.py'
-      - 'tests/test_iphone_field_evidence.py'
-      - '.github/workflows/phase18-iphone-field-evidence.yml'
-  pull_request:
-    paths:
-      - 'tools/validate_iphone_field_evidence.py'
-      - 'tests/test_iphone_field_evidence.py'
-      - '.github/workflows/phase18-iphone-field-evidence.yml'
   workflow_dispatch:
+
 permissions:
   contents: read
 jobs:

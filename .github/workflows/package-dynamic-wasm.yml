@@ -2,15 +2,13 @@
 # Not a production roster, not an iPhone/Safari hardware certification.
 name: Package verified dynamic CP-SAT WASM offline demo
 on:
-  workflow_run:
-    workflows: ["Dynamic assignment CP-SAT WebAssembly build"]
-    types: [completed]
   workflow_dispatch:
     inputs:
       source_run_id:
         description: "Successful dynamic CP-SAT WASM workflow run ID"
         required: true
         type: string
+
 permissions:
   actions: read
   contents: read

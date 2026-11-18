@@ -1,0 +1,53 @@
+# Primary budget-conscious, synthetic-only regression entrypoint.
+# Old expensive build/browser workflows remain explicit, manual release gates.
+name: Fast synthetic regression
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'solver/**'
+      - 'integration/**'
+      - 'tests/**'
+      - 'tools/**'
+      - 'scripts/**'
+      - '.github/workflows/**'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'solver/**'
+      - 'integration/**'
+      - 'tests/**'
+      - 'tools/**'
+      - 'scripts/**'
+      - '.github/workflows/**'
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: fast-synthetic-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+jobs:
+  fast-regression:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 7
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: '22'
+      - name: Check synthetic JS syntax and boundaries
+        run: |
+          node --check integration/month_audit.cjs
+          node --check integration/phase5_synthetic_adapter.cjs
+          node --check integration/phase5_v7_preview_adapter.cjs
+          node --check tests/month_real_wasm.cjs
+          node tests/phase5_synthetic_adapter.test.cjs
+          node tests/phase5_v7_preview.test.cjs
+      - name: Check fictional-only cross-month arithmetic and status guards
+        env:
+          PYTHONPATH: .
+        run: |
+          python3 -m unittest discover -s tests -p 'test_phase2*.py' -q
+          python3 -m unittest discover -s tests -p 'test_iphone_field_evidence.py' -q
+          python3 -m unittest discover -s tests -p 'test_ci_budget_policy.py' -q
+          python3 tools/check_ci_budget.py

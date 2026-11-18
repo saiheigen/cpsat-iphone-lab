@@ -4,11 +4,8 @@
 # assignments passed independent checks; it never means OPTIMAL.
 name: Dense 589-shift real WASM stress benchmark
 on:
-  push:
-    branches: [main]
-    paths:
-      - '.github/workflows/wasm-dense-month-benchmark.yml'
   workflow_dispatch:
+
 permissions:
   contents: read
   actions: read

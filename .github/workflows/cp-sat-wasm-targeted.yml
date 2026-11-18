@@ -3,9 +3,6 @@
 name: Targeted CP-SAT WebAssembly build
 
 on:
-  workflow_run:
-    workflows: ["Experimental CP-SAT WebAssembly"]
-    types: [completed]
   workflow_dispatch:
 
 permissions:

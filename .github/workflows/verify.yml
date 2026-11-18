@@ -1,17 +1,6 @@
 name: iPhone WASM baseline and native CP-SAT
 
 on:
-  push:
-    branches: [main]
-    # Avoid re-compiling the baseline for documentation-only edits or
-    # changes to unrelated experimental workflows.
-    paths:
-      - '.github/workflows/verify.yml'
-      - 'solver/**'
-      - 'tests/**'
-      - 'src/**'
-      - 'build/**'
-      - 'scripts/**'
   workflow_dispatch:
 
 permissions:
