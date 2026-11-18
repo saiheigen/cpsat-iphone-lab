@@ -2,6 +2,7 @@
 // Genuine OR-Tools C++/WASM integration, never a mock or operational roster.
 const fs=require('node:fs'),path=require('node:path');
 const {normalize,project}=require('../integration/phase5_synthetic_adapter.cjs');
+const {previewCombined}=require('../integration/phase5_v7_preview_adapter.cjs');
 const {toy,check,wire}=require('./month_hardship_real_wasm.cjs');
 const {createScenario}=require('./wasm_dense_month_benchmark.cjs');
 const {targetsFor}=require('./month_fair_real_wasm.cjs');
@@ -14,6 +15,7 @@ async function main(){
  if(factory&&typeof factory.default==='function')factory=factory.default;
  if(typeof factory!=='function')throw Error('Genuine module factory absent');
  const engine=await factory({wasmBinary:new Uint8Array(bytes),print:()=>{},printErr:()=>{}});
+ const provenPools={};
  const cases=[toy(),createScenario('door','blackouts-no-hints'),
   createScenario('officer','blackouts-no-hints'),
   createScenario('door','forced-vacancies')];
@@ -30,9 +32,23 @@ async function main(){
   const projected=project(t,got);
   if(projected.filled!==verified.filled||projected.missing!==source.shiftCount-verified.filled)
    throw Error('Adapter lost filled or unfilled duties');
+  if(source.staff>2 && (source.pool==='officer'||source.pool==='door'&&projected.missing>0))
+   provenPools[source.pool]={input:t,result:got};
   console.log(JSON.stringify({pool:t.pool,shifts:t.shifts,filled:projected.filled,
    missing:projected.missing,hardship:verified.hardship,status:got.status}));
  }
+ const preview=previewCombined(provenPools);
+ if(preview.format!=='guard-cpsat-synthetic-preview-v1'||
+    preview.importable_as_v7_backup!==false||
+    preview.operationally_certified!==false||
+    preview.schedule.door.length!==372||preview.schedule.officer.length!==217||
+    preview.filled!==577||preview.missing!==12||preview.vacancies.length!==12)
+   throw Error('Synthetic v7-shaped preview changed counts or acceptance gate');
+ console.log(JSON.stringify({preview_format:preview.format,
+  row_count:preview.schedule.door.length+preview.schedule.officer.length,
+  filled:preview.filled,missing:preview.missing,
+  importable_as_v7_backup:preview.importable_as_v7_backup,
+  operationally_certified:preview.operationally_certified}));
  console.log('PHASE5_GENUINE_WASM_INTEGRATION_PASS');
 }
 main().catch(e=>{console.error(e);process.exitCode=1;});
