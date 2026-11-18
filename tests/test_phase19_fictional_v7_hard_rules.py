@@ -196,7 +196,7 @@ class FakeHardRuleMatrixTests(unittest.TestCase):
         fake["final_abs_deviation"]=sum(abs(a-b) for a,b in zip(
             fake["actual_counts"],map(int,case["frame"].splitlines()[7].split(","))))
         fake["phase1_abs_deviation"]=fake["final_abs_deviation"]
-        with self.assertRaisesRegex(ValueError,"Illegal assignment"):
+        with self.assertRaisesRegex(ValueError,"excluded by eligibility"):
             audit_genuine_result(case,fake)
 
     def test_reaudit_rejects_altered_frame_and_l1(self):
