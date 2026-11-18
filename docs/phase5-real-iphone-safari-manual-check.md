@@ -35,6 +35,22 @@ Test all four synthetic cases **in actual Safari while offline**. Never use fabr
 | `officer-blackouts-no-hints` | 217 / 0 | Not tested | — | Pending |
 | `door-forced-vacancies` | 360 / 12 | Not tested | — | Pending |
 
+## Two-pool read-only preview gate (pending physical Safari testing)
+
+After successfully running `officer-blackouts-no-hints` and `door-forced-vacancies` **in the same page session**, the **顯示大門＋安官 589 班預覽** control should become enabled. Before both audits pass, it must remain disabled.
+
+- Activate the combined preview. Verify `guard-cpsat-synthetic-preview-v1`, `rows=589`, `filled=577`, `missing=12`, `door_rows=372`, `officer_rows=217`.
+- Open the read-only combined detail and inspect both 31-day pools, 12 explicit vacancies and anonymous `SIM_D_...` / `SIM_O_...` identities.
+- Change the selected scenario; the combined preview must disappear instead of leaving an old approved result in view.
+- Verify `importable_as_v7_backup=false`, `operationally_certified=false`, `full_v7_rule_parity_verified=false` and `real_iphone_safari_verified=false`.
+- Record actual elapsed time and any iPhone memory pressure, freeze or page reload. **Do not claim Safari success based on Linux Chromium or a Files preview.**
+
+| Combined preview | Expected | Actual device observation | Result |
+|---|---|---|---|
+| Dual-pool WASM-audited rows | 589 total / 577 filled / 12 missing | Not tested | Pending |
+| Per-day display | 62 pool/day groups / 589 rows | Not tested | Pending |
+| Remains preview-only | Not importable, no operational certification | Not tested | Pending |
+
 Verify for each result:
 - The status explicitly says the independently audited genuine WASM solution succeeded.
 - The displayed staffed and missing counts match the JSON, and the full vacancy list shows every missing day/slot for a partial-fill case.
