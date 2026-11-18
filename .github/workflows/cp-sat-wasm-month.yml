@@ -80,7 +80,7 @@ jobs:
           path: |
             .build/dynamic/cp_sat_month_bridge.js
             .build/dynamic/cp_sat_month_bridge.wasm
-            .build/dynamic/dynamic_wasm_proof.json
+            .build/dynamic/full_month_wasm_proof.json
             .build/upstream_commit.txt
           include-hidden-files: true
           if-no-files-found: error
