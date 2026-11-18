@@ -6,6 +6,7 @@ on:
     paths:
       - 'build/package_month_hardship_wasm.py'
       - 'src/phase5_hardship_worker.js'
+      - 'src/phase5_iphone_selfcheck.js'
       - 'tests/browser_month_hardship_wasm.py'
       - 'tests/test_package_month_hardship_wasm.py'
       - '.github/workflows/phase5-offline-ui-e2e.yml'
@@ -13,6 +14,7 @@ on:
     paths:
       - 'build/package_month_hardship_wasm.py'
       - 'src/phase5_hardship_worker.js'
+      - 'src/phase5_iphone_selfcheck.js'
       - 'tests/browser_month_hardship_wasm.py'
       - 'tests/test_package_month_hardship_wasm.py'
       - '.github/workflows/phase5-offline-ui-e2e.yml'
@@ -36,6 +38,7 @@ jobs:
           python3 -m py_compile build/package_month_hardship_wasm.py tests/browser_month_hardship_wasm.py
           node --check tests/month_hardship_real_wasm.cjs
           node --check src/phase5_hardship_worker.js
+          node --check src/phase5_iphone_selfcheck.js
           python3 -m unittest discover -s tests -p 'test_package_month_hardship_wasm.py' -v
       - name: Download only previously proven genuine C++ WASM and proof
         uses: actions/download-artifact@v4
