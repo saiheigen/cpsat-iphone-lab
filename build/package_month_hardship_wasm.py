@@ -342,7 +342,8 @@ btn.addEventListener("click",async()=>{
       "string",["string"],[serialize(t)]));
   const verified=independentlyAudit(t,got);
   const vacancies=got.assignments.flatMap((p,i)=>p===-1?[{day:Math.floor(i/HOURS[t.pool].length)+1,slot:i%HOURS[t.pool].length+1}]:[]);
-  if(vacancies.length!==verified.missing)throw Error("缺班清單與獨立驗證不一致");\n  summary.textContent="已排 "+verified.filled+" 班｜缺班 "+verified.missing+" 班"+
+  if(vacancies.length!==verified.missing)throw Error("缺班清單與獨立驗證不一致");
+  summary.textContent="已排 "+verified.filled+" 班｜缺班 "+verified.missing+" 班"+
     (vacancies.length?"｜缺班位置："+vacancies.slice(0,12).map(v=>v.day+"日第"+v.slot+"班").join("、")+(vacancies.length>12?"…（完整清單見下方）":""):"");
   const grouped=new Map();
   for(const v of vacancies){
