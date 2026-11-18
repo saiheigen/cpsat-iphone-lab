@@ -322,6 +322,12 @@ const vacancyDetails=document.getElementById("vacancy-details");
 const vacancyTitle=document.getElementById("vacancy-title");
 const vacancyList=document.getElementById("vacancy-list");
 let runtime=null;
+select.addEventListener("change",()=>{
+ status.textContent="已切換情境，請重新執行求解";
+ summary.textContent="尚無這個情境的已驗證結果";
+ out.textContent="沒有這個情境的求解結果";
+ vacancyDetails.hidden=true;vacancyList.replaceChildren();
+});
 btn.addEventListener("click",async()=>{
  btn.disabled=true;status.textContent="正在本機執行三階段求解…";
  out.textContent="尚待獨立驗證";summary.textContent="正在計算，尚無已驗證班表";
