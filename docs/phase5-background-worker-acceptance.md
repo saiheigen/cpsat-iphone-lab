@@ -19,8 +19,20 @@
 
 The observed WebKit fallback is deliberately retained to keep the synthetic test usable. **Do not claim that the iPhone UI cannot freeze**, or that WebKit file opening works, based on these results. The browser report separates runtime, loading method, optimality status and physical-device identity.
 
+## Updated WebKit origin diagnosis and nonblocking evidence — 2026-11-18
+
+The earlier WebKit fallback findings above are **historical**, not a claim that the Worker engine is intrinsically unsupported.
+
+- [Isolated WebKit origin diagnostic #44246682972](https://github.com/saiheigen/cpsat-iphone-lab/actions/runs/44246682972): **completed/success as a diagnostic**. Six attempts with Playwright `offline=True` yielded **0/6 Worker ready** (including `blob:null` on `about:blank`, `file://` and intercepted HTTPS). Six equivalent attempts with `offline=False` but **every external HTTP/HTTPS request denied through Playwright routing** yielded **6/6 Worker ready**, including direct `file://`. This implicates the Linux Playwright/WebKit offline-emulation setting; it does **not** independently establish real iPhone behavior.
+- [Proof-gated Linux WebKit two-policy full-month CI #44247032021](https://github.com/saiheigen/cpsat-iphone-lab/actions/runs/44247032021): **completed/success** with both policies and full genuine C++/WASM solver. The original Playwright strong-offline policy still passed solver correctness in main-thread fallback and retains its separate report.
+- Under the new `--network-policy deny-external`, the WebKit browser is **not marked offline** (`offline:false`), but all HTTP/HTTPS requests are explicitly intercepted and aborted. This permits internal `blob:` Worker loading and the single local HTML file to open directly as `file://`. Both desktop/mobile-sized WebKit 26.0 contexts produced `execution_mode=dedicated-worker` for **all 4 synthetic cases each (8/8)**.
+- The independent browser audit accepted the combined **589 shift** fictional preview (**577 filled, 12 missing**), the stage status flags, all explicit vacancy rows, and no stale UI data. Both contexts reported **0 external HTTP requests and 0 unhandled JavaScript errors**. Maximum observed main-thread heartbeat intervals were **192 ms desktop**, **305 ms mobile-sized**. These are Linux emulations, **not** measured iPhone freezes or memory pressure.
+- [Current Chromium file-mode CI #44247031995](https://github.com/saiheigen/cpsat-iphone-lab/actions/runs/44247031995), [genuine WASM adapter CI #44247032060](https://github.com/saiheigen/cpsat-iphone-lab/actions/runs/44247032060) and [synthetic adapter CI #44247032010](https://github.com/saiheigen/cpsat-iphone-lab/actions/runs/44247032010): **completed/success**.
+
+**Acceptance wording is intentionally strict:** `deny-external` proves no external HTTP/HTTPS egress and responsive Worker execution, but it is not equivalent to actual airplane mode. The separate `offline=True` WebKit case remains a blocking fallback. Physical Safari on a real iPhone has **not** been tested or approved. No real military data or v7 operational restore path is involved.
+
 ## Next acceptance gates
 
-1. Identify why Linux WebKit cannot start the Blob Worker in its `about:blank` test context; test a supported origin/load method separately from the actual WASM runtime. Do not silently mark fallback as background-safe.
+1. Diagnose if **actual iPhone Safari** permits a Blob Worker with Wi-Fi/cellular off when opening the fictional local HTML. The Linux Playwright offline-emulation blocking behavior above is isolated but not a substitute for this test.
 2. Test actual Safari on a real iPhone with only the fictional HTML. Measure initial load, multi-case memory and the maximum UI nonresponsive interval. A Files Quick Look or a different webview is not equivalent to Safari.
 3. Audit full v7 hard rules, cross-month archive freshness, imported data isolation and approval flow before enabling operational records.
