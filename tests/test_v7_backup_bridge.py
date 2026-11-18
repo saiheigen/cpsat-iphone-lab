@@ -109,6 +109,33 @@ class V7BridgeTests(unittest.TestCase):
         self.assertEqual(x.meal_credit["P002"], 0)
         self.assertFalse(x.operationally_certified)
 
+    def test_v7_officer_meal_credit_reaches_full_month_fairness_targets(self):
+        from solver.full_month_fair_wire_v3 import (
+            fair_people_from_v7_bridge, export_full_month_fair_v3)
+        from solver.full_month_wire_v2 import export_full_month_v2
+        data = fake_backup()
+        data["global"]["meal"] = (
+            "P001,115/12/10\\nP001,115/12/10\\nP001,115/12/12"
+        )
+        bridge = convert_v7_backup(data)
+        self.assertEqual(bridge.meal_credit["P001"], 2)
+        officer = fair_people_from_v7_bridge(bridge, "officer")
+        self.assertEqual([(p.ident,p.meal_credit) for p in officer],
+                         [("P001",2),("P002",0)])
+        self.assertEqual(officer[0].carry, 0)
+        guard = fair_people_from_v7_bridge(bridge, "door")
+        self.assertAlmostEqual(guard[0].weight, 0.333333)
+        self.assertEqual(guard[1].carry, 1)
+        v2 = export_full_month_v2(
+            2026,12,"officer",bridge.people,
+            events=bridge.events,history=bridge.history,
+            pins={k:v for k,v in bridge.pins.items()
+                  if k.startswith("officer:")})
+        adjusted = export_full_month_fair_v3(v2,officer)
+        self.assertTrue(adjusted["targets"])
+        self.assertEqual(adjusted["source_pool"],"officer")
+        self.assertFalse(adjusted["operationally_certified"])
+
     def test_three_column_name_without_rank_is_preserved(self):
         data = fake_backup()
         data["global"]["door"] = "H001,模擬甲,男\nH002,上兵,模擬乙,男"
