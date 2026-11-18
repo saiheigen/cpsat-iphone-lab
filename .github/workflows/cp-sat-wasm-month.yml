@@ -23,6 +23,8 @@ jobs:
     timeout-minutes: 120
     steps:
       - uses: actions/checkout@v4
+      - name: Validate entire 589-shift synthetic fixture before expensive compilation
+        run: node tests/month_fixture_preflight.cjs
       - uses: emscripten-core/setup-emsdk@v15
         with:
           version: '4.0.12'
