@@ -36,6 +36,18 @@
 - `.github/workflows/verify.yml`：加跑虛構完整月份公平案例的 Node 靜態預檢（明標非真正 WASM）。
 - `.github/workflows/package-month-fair-wasm.yml`：**真正 v3 C++ 編譯 success → 實際 Node 求解＋獨立班次稽核 success → 重新產生並證明案例 hash → 打包 HTML**。任一步失敗，不應產生可下載的「成功公平測試頁」。
 
+
+## 審查後新增的實證（同日 2026-11-18）
+
+原有「待公平版編譯」狀態已在本輪工作期間更新，**以以下最新實測結果為準**：
+
+- [真正兩階段 v3 C++ OR-Tools WASM 編譯與 Node 驗收 #1](https://github.com/saiheigen/cpsat-iphone-lab/actions/runs/44216350348)：**completed/success**。小型公平精確 oracle 通過；密集合成大門 372／372（L1 偏差 444 → 4）、安官 217／217（166 → 10）、固定缺班大門 360／372（150 → 6），各組填班與公平階段都回報 `OPTIMAL`，通過獨立排班限制與統計稽核。這些數字僅對虛構模型成立。
+- [公平 v3 真正 WASM 離線頁打包 #1](https://github.com/saiheigen/cpsat-iphone-lab/actions/runs/44221379106)：**completed/success**。在發布前重新呼叫真正 Node WASM，驗證與編譯來源相同的 JS/WASM SHA-256，且核對這次新增的虛構案例完整 SHA-256 和 HTML 字元防護。
+- [公平 v3 真正離線 Chromium 驗收 #1](https://github.com/saiheigen/cpsat-iphone-lab/actions/runs/44221443285)：**completed/success**。四個虛構場景 × 桌面／手機尺寸觸控模擬 = **8/8 成功**，實際 browser WASM 返回合法班數、未惡化且已改善的 L1 偏差；整批桌面約 23.673 秒，手機尺寸模擬約 21.039 秒。**仍不是實體 iPhone Safari 的效能／相容性驗收**。
+- [原生、資料轉換及打包防錯 CI #138](https://github.com/saiheigen/cpsat-iphone-lab/actions/runs/44221054085)：**completed/success**；前一個舊版 CI #136 曾因測試的 Unicode escape 斷言多寫一個反斜線而失敗，修正後再驗證成功。不要隱藏過去的失敗，但最新的成功結果已涵蓋修正。
+
+**提醒**：原本第 1 項「尚未完成真正公平 v3 WASM」現在已完成*指定虛構案例的實測*；第 2～5 項對跨月新鮮度、艱苦哨／值星業參完整公平、iPhone Safari 與正式軍務整合的缺口**依然存在**，不能因 8/8 browser 過關而宣告可正式排哨。
+
 ## 實務結論
 
 本次不是「發現系統已全面正常」，而是已找到並修補幾個可能造成**錯誤公平額度或不實驗收宣稱**的具體缺口。部署前的主瓶頸是**v3 真正 C++/WASM 的兩階段求解驗證、完整艱苦公平，以及真實 iPhone Safari／v7 資料一致性**。
