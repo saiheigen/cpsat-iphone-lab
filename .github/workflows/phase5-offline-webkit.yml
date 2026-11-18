@@ -81,7 +81,9 @@ jobs:
             proof/real_hardship_node_proof.json \
             proof/synthetic_hardship_browser_cases.json \
             dist/experimental_full_month_hardship_cp_sat.html
+            dist/README-IPHONE-SAFARI-TEST.md
           test -s dist/experimental_full_month_hardship_cp_sat.html
+          cp docs/phase5-real-iphone-safari-manual-check.md dist/README-IPHONE-SAFARI-TEST.md
       - name: Preserve strict Playwright offline-emulation regression (may need blocking fallback)
         shell: bash
         run: |
