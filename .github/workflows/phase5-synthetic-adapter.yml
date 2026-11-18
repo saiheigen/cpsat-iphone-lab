@@ -1,0 +1,27 @@
+name: Phase 5 synthetic integration boundary regression
+on:
+  push:
+    paths:
+      - 'integration/phase5_*.cjs'
+      - 'tests/phase5_*.cjs'
+      - '.github/workflows/phase5-synthetic-adapter.yml'
+  pull_request:
+    paths:
+      - 'integration/phase5_*.cjs'
+      - 'tests/phase5_synthetic_adapter.test.cjs'
+      - '.github/workflows/phase5-synthetic-adapter.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  synthetic-adapter-regression:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: |
+          node tests/phase5_synthetic_adapter.test.cjs
+          node tests/phase5_v7_preview.test.cjs

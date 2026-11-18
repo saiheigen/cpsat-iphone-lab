@@ -1,0 +1,46 @@
+name: Phase 5 genuine WASM integration regression
+on:
+  push:
+    paths:
+      - 'integration/phase5_*.cjs'
+      - 'tests/phase5_*.cjs'
+      - '.github/workflows/phase5-real-wasm-integration.yml'
+  pull_request:
+    paths:
+      - 'integration/phase5_*.cjs'
+      - 'tests/phase5_*.cjs'
+      - '.github/workflows/phase5-real-wasm-integration.yml'
+  workflow_dispatch:
+permissions:
+  actions: read
+  contents: read
+jobs:
+  genuine-wasm-adapter:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Test synthetic adapter and fail-closed combined v7 preview
+        run: |
+          node tests/phase5_synthetic_adapter.test.cjs
+          node tests/phase5_v7_preview.test.cjs
+      - name: Download previously verified genuine C++ WASM artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: experimental-full-month-harsh-cpsat-wasm-with-proof
+          run-id: 44223914115
+          repository: ${{ github.repository }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          path: received
+      - name: Run genuine WASM and independent adapter audit
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(find received -name cp_sat_month_hardship_bridge.js -type f | wc -l)" -eq 1
+          test "$(find received -name cp_sat_month_hardship_bridge.wasm -type f | wc -l)" -eq 1
+          js="$(find received -name cp_sat_month_hardship_bridge.js -type f)"
+          wasm="$(find received -name cp_sat_month_hardship_bridge.wasm -type f)"
+          node tests/phase5_real_wasm_integration.cjs "$js" "$wasm"

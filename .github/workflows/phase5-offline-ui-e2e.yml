@@ -1,0 +1,103 @@
+# Offline browser UI acceptance from a genuinely attested C++/WASM artifact.
+# Runs only fictional fixtures. Chromium is NOT physical iPhone Safari.
+name: Phase 5 genuine offline UI end-to-end acceptance
+on:
+  pull_request:
+    paths:
+      - 'build/package_month_hardship_wasm.py'
+      - 'src/phase5_hardship_worker.js'
+      - 'src/phase5_iphone_selfcheck.js'
+      - 'tests/browser_month_hardship_wasm.py'
+      - 'tests/test_package_month_hardship_wasm.py'
+      - '.github/workflows/phase5-offline-ui-e2e.yml'
+  push:
+    paths:
+      - 'build/package_month_hardship_wasm.py'
+      - 'src/phase5_hardship_worker.js'
+      - 'src/phase5_iphone_selfcheck.js'
+      - 'tests/browser_month_hardship_wasm.py'
+      - 'tests/test_package_month_hardship_wasm.py'
+      - '.github/workflows/phase5-offline-ui-e2e.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+  actions: read
+jobs:
+  genuine-offline-browser-ui:
+    runs-on: ubuntu-24.04
+    container:
+      image: mcr.microsoft.com/playwright/python:v1.58.0-noble
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Check syntax before expensive solver startup
+        run: |
+          python3 -m py_compile build/package_month_hardship_wasm.py tests/browser_month_hardship_wasm.py
+          node --check tests/month_hardship_real_wasm.cjs
+          node --check src/phase5_hardship_worker.js
+          node --check src/phase5_iphone_selfcheck.js
+          python3 -m unittest discover -s tests -p 'test_package_month_hardship_wasm.py' -v
+      - name: Download only previously proven genuine C++ WASM and proof
+        uses: actions/download-artifact@v4
+        with:
+          name: experimental-full-month-harsh-cpsat-wasm-with-proof
+          run-id: 44223914115
+          repository: ${{ github.repository }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          path: received
+      - name: Independently rerun real WASM and match proven source digests
+        shell: bash
+        run: |
+          set -euo pipefail
+          for fname in cp_sat_month_hardship_bridge.js cp_sat_month_hardship_bridge.wasm full_month_hardship_wasm_proof.json; do
+            test "$(find received -type f -name "$fname" | wc -l)" -eq 1
+          done
+          mkdir -p proof dist
+          js="$(find received -type f -name cp_sat_month_hardship_bridge.js)"
+          wasm="$(find received -type f -name cp_sat_month_hardship_bridge.wasm)"
+          old="$(find received -type f -name full_month_hardship_wasm_proof.json)"
+          node tests/month_hardship_real_wasm.cjs "$js" "$wasm" proof/real_hardship_node_proof.json
+          node tests/month_hardship_real_wasm.cjs --emit-browser-fixtures proof/synthetic_hardship_browser_cases.json
+          python3 - "$old" proof/real_hardship_node_proof.json <<'PY'
+          import json,sys
+          from pathlib import Path
+          old=json.loads(Path(sys.argv[1]).read_text())
+          new=json.loads(Path(sys.argv[2]).read_text())
+          assert old['accepted'] is True and new['accepted'] is True
+          for key in ['contract','wasm_sha256','js_sha256']:
+              assert old[key]==new[key],key
+          PY
+          echo "HARD_JS=$js" >> "$GITHUB_ENV"
+          echo "HARD_WASM=$wasm" >> "$GITHUB_ENV"
+      - name: Reject invalid packaging proofs and build standalone HTML
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 build/package_month_hardship_wasm.py "$HARD_JS" "$HARD_WASM" \
+            proof/real_hardship_node_proof.json \
+            proof/synthetic_hardship_browser_cases.json \
+            dist/experimental_full_month_hardship_cp_sat.html
+          test -s dist/experimental_full_month_hardship_cp_sat.html
+          cp docs/phase5-real-iphone-safari-manual-check.md dist/README-IPHONE-SAFARI-TEST.md
+      - name: Run offline desktop and mobile-sized Chromium real solver and UI assertions
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m pip install --disable-pip-version-check playwright==1.58.0
+          python3 tests/browser_month_hardship_wasm.py dist/experimental_full_month_hardship_cp_sat.html
+      - name: Preserve synthetic offline page and inspectable browser evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: phase5-genuine-offline-ui-e2e-evidence
+          path: |
+            dist/experimental_full_month_hardship_cp_sat.html
+            dist/README-IPHONE-SAFARI-TEST.md
+            proof/real_hardship_node_proof.json
+            proof/synthetic_hardship_browser_cases.json
+            hardship_month_browser_proof.json
+            hardship-*-failure.png
+          if-no-files-found: warn

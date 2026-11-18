@@ -154,6 +154,15 @@ h1{font-size:22px;line-height:1.35}.notice{background:#fff2dc;padding:12px;borde
 select,button{display:block;width:100%;padding:14px;border-radius:10px;font-size:16px}
 button{background:#0d6888;color:white;font-weight:700;border:0;margin-top:14px}
 button:disabled{opacity:.55}label{display:block;margin:15px 0 7px}
+details{padding:9px 11px;border:1px solid #c7d8e4;border-radius:9px;margin:12px 0}
+details summary{cursor:pointer;font-weight:700}details ol{margin:9px 0;padding-left:24px}
+details li{margin:5px 0}.roster-day{padding:8px 0;border-bottom:1px solid #dce5ed}
+.roster-day strong{display:block}.roster-day ul{margin:4px 0 8px;padding-left:22px}
+.roster-day li{font-size:14px;line-height:1.5}
+.phone-check{display:flex;align-items:center;gap:8px}
+.phone-check input{width:auto;flex:none}
+#phone-evidence-json{display:block;width:100%;padding:10px;box-sizing:border-box;
+border:1px solid #b4c9d8;border-radius:8px;background:#f5f8fa;font-size:12px}
 pre{white-space:pre-wrap;overflow-wrap:anywhere;background:#edf3f8;border-radius:9px;
 padding:13px;font-size:12px}small{display:block;color:#647586;overflow-wrap:anywhere}
 </style></head><body><main>
@@ -165,14 +174,58 @@ padding:13px;font-size:12px}small{display:block;color:#647586;overflow-wrap:anyw
 <label for="scenario">選擇已驗證的虛構情境</label>
 <select id="scenario"></select>
 <button id="run">在本機執行真正 WASM 三階段求解</button>
+<button id="reset-worker" type="button">重啟本機運算引擎並清空預覽</button>
+<button id="cancel-solve" type="button" disabled>取消目前的背景求解</button>
+<p id="engine-mode" aria-live="polite">尚未選擇運算方式</p>
 <p id="status" role="status">尚未執行</p>
+<section id="summary" aria-live="polite">尚無排班摘要</section>
+<details id="vacancy-details" hidden><summary id="vacancy-title">查看完整缺班清單</summary>
+<ol id="vacancy-list"></ol></details>
+<details id="roster-preview" hidden><summary>查看整月虛構班表預覽（不可匯入正式網站）</summary>
+<div id="roster-days"></div></details>
+<section id="combined-workspace" aria-label="雙勤務虛構整月預覽">
+<p>跨勤務完整月預覽：須先分別完成「安官整月」與「大門強制缺班」兩個真正 WASM 測試。</p>
+<button id="combined-run" disabled>顯示大門＋安官 589 班預覽</button>
+<p id="combined-status" role="status">尚缺兩個已驗證的虛構情境</p>
+<details id="combined-preview" hidden><summary>查看雙勤務每日班次（不可匯入正式網站）</summary>
+<div id="combined-days"></div></details>
+<pre id="combined-output">尚無雙勤務已驗證資料</pre>
+</section>
+<details id="phone-selfcheck"><summary>📱 iPhone Safari 實機自檢與測試紀錄（虛構資料）</summary>
+<p>此處不會自動判定實機通過，也不會傳送資料。請在手機上自行確認瀏覽器和網路狀態；可測試 Worker 並複製結果回傳。</p>
+<label for="phone-open-method">實際使用什麼方式開啟？</label>
+<select id="phone-open-method">
+<option value="unknown">尚未確認</option>
+<option value="physical-safari">實體 iPhone 的 Safari App</option>
+<option value="files-quick-look">iOS 檔案 App 預覽／Quick Look</option>
+<option value="embedded-webview">其他 App 內嵌瀏覽器</option>
+<option value="other-browser">其他瀏覽器或電腦</option>
+</select>
+<label for="phone-network-mode">你手動確認的網路狀態</label>
+<select id="phone-network-mode">
+<option value="unknown">尚未確認</option>
+<option value="all-radios-off">已關閉 Wi-Fi 與行動數據</option>
+<option value="connected">目前仍可上網</option>
+</select>
+<label class="phone-check"><input type="checkbox" id="phone-is-physical"> 我確認目前使用的是實體 iPhone（非模擬器）</label>
+<button id="phone-worker-probe" type="button">檢查本機 WebAssembly 與背景 Worker</button>
+<p id="phone-probe-status" role="status">尚未自檢</p>
+<p id="phone-record-count">0 / 4 情境已記錄</p>
+<button id="phone-generate-evidence" type="button">產生不含班表與姓名的測試紀錄</button>
+<button id="phone-copy-evidence" type="button">複製測試紀錄</button>
+<p id="phone-evidence-status" role="status">請先完成所需虛構情境，再產生紀錄。</p>
+<label for="phone-evidence-json">可自行複製的 JSON 測試紀錄</label>
+<textarea id="phone-evidence-json" rows="9" readonly spellcheck="false" aria-label="本機測試紀錄"></textarea>
+<small>紀錄只在本機顯示；沒有資料上傳。手動填寫與瀏覽器提示不能取代獨立 iPhone Safari 驗收。</small>
+</details>
 <pre id="output">沒有結果</pre>
 <small>WASM SHA-256：__WASM_SHA__</small>
-</main><script>__GLUE__</script>
+</main><script id="phase5-wasm-glue">__GLUE__</script>
 <script>
 "use strict";
 const CASES=__CASES__;
 const ENCODED=__WASM_PARTS__;
+const WORKER_BOOTSTRAP=__WORKER_BOOTSTRAP__;
 const HOURS={
  door:[[22,24],[0,2],[2,4],[4,6],[6,8],[8,10],[10,12],[12,14],[14,16],[16,18],[18,20],[20,22]],
  officer:[[22,24],[0,2],[2,4],[4,6],[6,12],[12,18],[18,22]]
@@ -310,30 +363,248 @@ function independentlyAudit(t,res){
          hardship_optimal_proven:res.hardship_optimal_proven_given_locked_predecessors===true};
 }
 const btn=document.getElementById("run");
+const resetBtn=document.getElementById("reset-worker");
+const cancelBtn=document.getElementById("cancel-solve");
 const status=document.getElementById("status"),out=document.getElementById("output");
-let runtime=null;
+const summary=document.getElementById("summary");
+const vacancyDetails=document.getElementById("vacancy-details");
+const vacancyTitle=document.getElementById("vacancy-title");
+const vacancyList=document.getElementById("vacancy-list");
+const rosterDetails=document.getElementById("roster-preview");
+const rosterDays=document.getElementById("roster-days");
+const combinedBtn=document.getElementById("combined-run");
+const combinedStatus=document.getElementById("combined-status");
+const combinedDetails=document.getElementById("combined-preview");
+const combinedDays=document.getElementById("combined-days");
+const combinedOutput=document.getElementById("combined-output");
+const combinedCases=["door-forced-vacancies","officer-blackouts-no-hints"];
+const acceptedSynthetic=new Map();
+function clearCombinedView(){
+ combinedDetails.hidden=true;combinedDetails.open=false;combinedDays.replaceChildren();
+ combinedOutput.textContent="尚無本次合併預覽";
+}
+function updateCombinedReadiness(){
+ combinedBtn.disabled=!combinedCases.every(id=>acceptedSynthetic.has(id));
+ combinedStatus.textContent=combinedBtn.disabled?
+  "請先成功求解安官整月與大門強制缺班情境":
+  "兩個虛構月份已分別求解與驗證，可建立 589 班合併預覽";
+}
+let runtime=null,solverWorker=null,workerStartup=null,workerInitialized=false;
+let workerSeq=0,workerWasmSent=false,solveGeneration=0;
+let pendingStartupFinish=null;
+const pendingWorkerRequests=new Map();
+function disableWorker(err){
+ const abortStartup=pendingStartupFinish;
+ pendingStartupFinish=null;
+ if(solverWorker){try{solverWorker.terminate();}catch(_){}}
+ solverWorker=null;workerInitialized=false;workerWasmSent=false;workerStartup=null;
+ for(const [,entry] of pendingWorkerRequests)entry.reject(Error(String(err||"Worker ended")));
+ pendingWorkerRequests.clear();
+ if(abortStartup)abortStartup(false);
+}
+function prepareWorker(){
+ if(workerStartup)return workerStartup;
+ workerStartup=Promise.resolve().then(()=>new Promise(resolve=>{
+  if(typeof Worker!=="function"||typeof Blob!=="function"||
+      !URL||typeof URL.createObjectURL!=="function"){
+   resolve(false);return;
+  }
+  let w=null,url=null,timer=null,settled=false;
+  function finish(ready){
+   if(settled)return;
+   settled=true;
+   if(pendingStartupFinish===finish)pendingStartupFinish=null;
+   if(timer!==null)clearTimeout(timer);
+   if(url)URL.revokeObjectURL(url);
+   if(!ready)disableWorker("Worker startup unavailable");
+   workerInitialized=ready;resolve(ready);
+  }
+  pendingStartupFinish=finish;
+  try{
+   const glue=document.getElementById("phase5-wasm-glue").textContent;
+   url=URL.createObjectURL(new Blob([glue,"\n",WORKER_BOOTSTRAP],
+     {type:"text/javascript"}));
+   w=new Worker(url);
+   solverWorker=w;
+   w.onmessage=event=>{
+    if(solverWorker!==w)return;
+    const data=event.data;
+    if(!data||typeof data!=="object")return;
+    if(data.type==="ready"){finish(true);return;}
+    const entry=pendingWorkerRequests.get(data.id);
+    if(!entry)return;
+    pendingWorkerRequests.delete(data.id);
+    if(data.type==="result")entry.resolve(data.result);
+    else if(data.type==="error"){
+     entry.reject(Error(data.error||"Worker solver failed"));
+     disableWorker("Worker reported an error");
+    }
+   };
+   w.onerror=event=>{
+    if(solverWorker!==w)return;
+    if(event&&typeof event.preventDefault==="function")event.preventDefault();
+    if(!settled)finish(false);
+    else disableWorker("Worker runtime error");
+   };
+   w.onmessageerror=()=>{
+    if(solverWorker!==w)return;
+    if(!settled)finish(false);
+    else disableWorker("Worker message decoding error");
+   };
+   timer=setTimeout(()=>finish(false),12000);
+  }catch(_){finish(false);}
+ })).then(ready=>{
+  if(!ready)workerStartup=null;
+  return ready;
+ });
+ return workerStartup;
+}
+async function solveWithMode(t,generation){
+ const frame=serialize(t);
+ const workerReady=await prepareWorker();
+ if(generation!==solveGeneration)
+  throw Error("Cancelled before Worker solve");
+ if(workerReady){
+  if(!solverWorker)throw Error("Worker unexpectedly unavailable");
+  const id=++workerSeq;
+  const payload={type:"solve",id,frame};
+  const transfers=[];
+  if(!workerWasmSent){
+   const bytes=toBytes(ENCODED);
+   if(!WebAssembly.validate(bytes))throw Error("Worker WASM failed validation");
+   payload.wasm=bytes.buffer;
+   transfers.push(bytes.buffer);
+  }
+  const result=await new Promise((resolve,reject)=>{
+   const watchdog=setTimeout(()=>{
+    if(pendingWorkerRequests.has(id))
+     disableWorker("Worker solve watchdog expired; result must not be used");
+   },90000);
+   pendingWorkerRequests.set(id,{
+    resolve:value=>{clearTimeout(watchdog);resolve(value);},
+    reject:err=>{clearTimeout(watchdog);reject(err);}
+   });
+   try{
+    solverWorker.postMessage(payload,transfers);
+    if(transfers.length)workerWasmSent=true;
+   }catch(err){
+    disableWorker("Worker message could not be sent");
+   }
+  });
+  return {got:result,executionMode:"dedicated-worker"};
+ }
+ if(typeof createMonthHardshipModule!=="function")
+  throw Error("缺少真正 CP-SAT 模組");
+ if(!runtime){
+  const wasm=toBytes(ENCODED);
+  if(!WebAssembly.validate(wasm))throw Error("WASM 驗證失敗");
+  runtime=await createMonthHardshipModule({wasmBinary:wasm,
+   print:()=>{},printErr:e=>console.error(String(e))});
+ }
+ return {got:JSON.parse(runtime.ccall("solve_guard_month_harsh_v4",
+   "string",["string"],[frame])),executionMode:"main-thread-fallback"};
+}
+cancelBtn.addEventListener("click",()=>{
+ if(!btn.disabled)return;
+ solveGeneration++;
+ disableWorker("User cancelled the active Worker calculation");
+ runtime=null;
+ acceptedSynthetic.clear();
+ clearCombinedView();updateCombinedReadiness();
+ cancelBtn.disabled=true;
+ status.textContent="⏹ 已要求取消計算，舊結果不可採用";
+ window.dispatchEvent(new Event("phase5-session-reset"));
+});
+resetBtn.addEventListener("click",()=>{
+ if(btn.disabled)return;
+ disableWorker("User requested a clean Worker restart");
+ runtime=null;
+ acceptedSynthetic.clear();
+ clearCombinedView();updateCombinedReadiness();
+ summary.textContent="運算引擎已重啟；目前沒有可採用的已驗證班表";
+ status.textContent="已清空舊結果，請重新執行求解";
+ document.getElementById("engine-mode").textContent="背景 Worker 將在下次求解時重新建立";
+ out.textContent="沒有結果（引擎已重置）";
+ vacancyDetails.hidden=true;vacancyDetails.open=false;vacancyList.replaceChildren();
+ rosterDetails.hidden=true;rosterDetails.open=false;rosterDays.replaceChildren();
+ window.dispatchEvent(new Event("phase5-session-reset"));
+});
+select.addEventListener("change",()=>{
+ clearCombinedView();updateCombinedReadiness();
+ status.textContent="已切換情境，請重新執行求解";
+ summary.textContent="尚無這個情境的已驗證結果";
+ out.textContent="沒有這個情境的求解結果";
+ vacancyDetails.hidden=true;vacancyDetails.open=false;vacancyList.replaceChildren();
+ rosterDetails.hidden=true;rosterDetails.open=false;rosterDays.replaceChildren();
+});
 btn.addEventListener("click",async()=>{
- btn.disabled=true;status.textContent="正在本機執行三階段求解…";
- out.textContent="尚待獨立驗證";
+ clearCombinedView();
+ const selected=select.value;
+ if(combinedCases.includes(selected))acceptedSynthetic.delete(selected);
+ updateCombinedReadiness();
+ const generation=++solveGeneration;
+ btn.disabled=true;select.disabled=true;combinedBtn.disabled=true;resetBtn.disabled=true;cancelBtn.disabled=false;
+ status.textContent="正在本機執行三階段求解…";
+ document.getElementById("engine-mode").textContent="正在初始化本機 Worker／WASM…";
+ out.textContent="尚待獨立驗證";summary.textContent="正在計算，尚無已驗證班表";
+ vacancyDetails.hidden=true;vacancyDetails.open=false;vacancyList.replaceChildren();
+ rosterDetails.hidden=true;rosterDetails.open=false;rosterDays.replaceChildren();
  await new Promise(ok=>requestAnimationFrame(ok));
  const start=Date.now();
  try{
-  if(typeof createMonthHardshipModule!=="function")throw Error("缺少真正 CP-SAT 模組");
-  if(!runtime){
-   const wasm=toBytes(ENCODED);
-   if(!WebAssembly.validate(wasm))throw Error("WASM 驗證失敗");
-   runtime=await createMonthHardshipModule({wasmBinary:wasm,
-      print:()=>{},printErr:e=>console.error(String(e))});
-  }
   const t=CASES.find(t=>t.id===select.value);
   if(!t)throw Error("找不到虛構情境");
-  const got=JSON.parse(runtime.ccall("solve_guard_month_harsh_v4",
-      "string",["string"],[serialize(t)]));
+  const {got,executionMode}=await solveWithMode(t,generation);
+  if(generation!==solveGeneration)throw Error("Cancelled stale solve response");
+  document.getElementById("engine-mode").textContent=
+    executionMode==="dedicated-worker"?
+    "✅ 背景 Worker 運算，畫面可持續回應":
+    "⚠️ 本瀏覽器改用主執行緒運算；計算期間可能卡頓";
   const verified=independentlyAudit(t,got);
+  const vacancies=got.assignments.flatMap((p,i)=>p===-1?[{day:Math.floor(i/HOURS[t.pool].length)+1,slot:i%HOURS[t.pool].length+1}]:[]);
+  if(vacancies.length!==verified.missing)throw Error("缺班清單與獨立驗證不一致");
+  summary.textContent="已排 "+verified.filled+" 班｜缺班 "+verified.missing+" 班"+
+    (vacancies.length?"｜缺班位置："+vacancies.slice(0,12).map(v=>v.day+"日第"+v.slot+"班").join("、")+(vacancies.length>12?"…（完整清單見下方）":""):"");
+  const grouped=new Map();
+  for(const v of vacancies){
+   if(!grouped.has(v.day))grouped.set(v.day,[]);
+   const [start,end]=HOURS[t.pool][v.slot-1];
+   grouped.get(v.day).push("第"+v.slot+"班（"+String(start).padStart(2,"0")+":00–"+
+     String(end).padStart(2,"0")+":00）");
+  }
+  vacancyTitle.textContent="查看完整缺班清單（"+vacancies.length+"班／"+grouped.size+"天）";
+  for(const [day,slots] of grouped){
+   const li=document.createElement("li");
+   li.textContent=day+"日："+slots.join("、");
+   vacancyList.appendChild(li);
+  }
+  vacancyDetails.open=false;vacancyDetails.hidden=vacancies.length===0;
+  const totalSlots=HOURS[t.pool].length;
+  for(let day=1;day<=Math.ceil(t.shifts/totalSlots);day++){
+   const section=document.createElement("section");section.className="roster-day";
+   const title=document.createElement("strong");
+   title.textContent=t.year+"/"+t.month+"/"+day+"（虛構）";
+   const list=document.createElement("ul");
+   for(let slot=1;slot<=totalSlots;slot++){
+    const i=(day-1)*totalSlots+slot-1,p=got.assignments[i];
+    const [start,end]=HOURS[t.pool][slot-1];
+    const li=document.createElement("li");
+    li.textContent="第"+slot+"班 "+String(start).padStart(2,"0")+":00–"+
+      String(end).padStart(2,"0")+":00｜"+(p<0?"缺班":"虛構人員 #"+(p+1));
+    list.appendChild(li);
+   }
+   section.append(title,list);rosterDays.appendChild(section);
+  }
+  rosterDetails.hidden=false;rosterDetails.open=false;
+  if(combinedCases.includes(t.id)){
+   acceptedSynthetic.set(t.id,{t,got,verified});
+   updateCombinedReadiness();
+  }
   status.textContent="✅ 真正 WASM 三階段合法填班與艱苦公平檢查通過";
   out.textContent=JSON.stringify({accepted:true,scenario:t.id,
    status:got.status,shifts:t.shifts,staff:t.staff,
    filled:verified.filled,missing:verified.missing,
+   vacancies,
    phase1_abs_deviation:verified.start_cost,
    final_abs_deviation:verified.final_cost,
    fill_phase:verified.fill_phase,fair_phase:verified.fair_phase,
@@ -343,13 +614,94 @@ btn.addEventListener("click",async()=>{
    hardship_final_score:verified.hardship_final_score,
    hardship_optimal_proven:verified.hardship_optimal_proven,
    elapsed_ms:Date.now()-start,runtime:"this-device",
+   execution_mode:executionMode,
    real_iphone_safari_verified:false,
    operationally_certified:false},null,2);
  }catch(err){
-  status.textContent="❌ 本機三階段求解／獨立驗證失敗";
+  status.textContent=generation!==solveGeneration?
+   "⏹ 計算已取消；沒有可採用的新班表":
+   "❌ 本機三階段求解／獨立驗證失敗";
+  summary.textContent="未產生可驗證班表，禁止採用結果";
+  vacancyDetails.hidden=true;vacancyDetails.open=false;vacancyList.replaceChildren();
+ rosterDetails.hidden=true;rosterDetails.open=false;rosterDays.replaceChildren();
   out.textContent=String(err&&err.stack||err);
- }finally{btn.disabled=false;}
+ }finally{btn.disabled=false;select.disabled=false;resetBtn.disabled=false;cancelBtn.disabled=true;updateCombinedReadiness();}
 });
+combinedBtn.addEventListener("click",()=>{
+ clearCombinedView();
+ combinedStatus.textContent="正在重新獨立核對兩個虛構勤務…";
+ try{
+  if(!combinedCases.every(id=>acceptedSynthetic.has(id)))throw Error("缺少已驗證雙勤務結果");
+  const door=acceptedSynthetic.get("door-forced-vacancies");
+  const officer=acceptedSynthetic.get("officer-blackouts-no-hints");
+  const entries=[["door",door],["officer",officer]];
+  let year=null,month=null,filled=0,missing=0,total=0;
+  const rows={door:[],officer:[]};
+  for(const [pool,data] of entries){
+   if(!data||data.t.pool!==pool||data.t.synthetic_only!==true)
+    throw Error("虛構資料類別驗證失敗");
+   const t=data.t,got=data.got;
+   if(year===null){year=t.year;month=t.month;}
+   if(t.year!==year||t.month!==month)throw Error("不得混合不同月份");
+   const count=new Date(Date.UTC(year,month,0)).getUTCDate()*HOURS[pool].length;
+   if(t.shifts!==count)throw Error("勤務月份班次不完整");
+   const v=independentlyAudit(t,got);
+   if(v.filled!==data.verified.filled||v.missing!==data.verified.missing)
+    throw Error("與先前已核對結果不同");
+   const slots=HOURS[pool].length;
+   for(let i=0;i<got.assignments.length;i++){
+    const person=got.assignments[i],day=Math.floor(i/slots)+1,slot=i%slots+1;
+    const serial=Date.UTC(year,month-1,day)/86400000;
+    if(!Number.isInteger(serial))throw Error("預覽日期序號異常");
+    const syntheticId=person<0?null:
+      "SIM_"+(pool==="door"?"D":"O")+"_"+String(person).padStart(3,"0");
+    rows[pool].push([serial,slot,syntheticId]);
+   }
+   filled+=v.filled;missing+=v.missing;total+=count;
+  }
+  if(total!==589||filled!==577||missing!==12||
+     rows.door.length!==372||rows.officer.length!==217)
+   throw Error("雙勤務填班或缺班數與證明不符");
+  for(const [pool] of entries){
+   const heading=document.createElement("h3");
+   heading.textContent=pool==="door"?"大門衛哨（虛構）":"安全士官（虛構）";
+   combinedDays.appendChild(heading);
+   const slots=HOURS[pool].length;
+   for(let day=1;day<=new Date(Date.UTC(year,month,0)).getUTCDate();day++){
+    const section=document.createElement("section");section.className="roster-day";
+    const title=document.createElement("strong");
+    title.textContent=year+"/"+month+"/"+day;
+    const list=document.createElement("ul");
+    for(let k=0;k<slots;k++){
+     const [serial,slot,person]=rows[pool][(day-1)*slots+k];
+     const li=document.createElement("li");
+     const [start,end]=HOURS[pool][k];
+     li.textContent="第"+slot+"班 "+String(start).padStart(2,"0")+":00–"+
+      String(end).padStart(2,"0")+":00｜"+(person===null?"缺班":person);
+     list.appendChild(li);
+    }
+    section.append(title,list);combinedDays.appendChild(section);
+   }
+  }
+  if(combinedDays.querySelectorAll("li").length!==total)
+   throw Error("合併預覽漏掉班次");
+  combinedOutput.textContent=JSON.stringify({
+   accepted:true,format:"guard-cpsat-synthetic-preview-v1",
+   schema_shape:"v7-month-schedule-rows-v1",
+   month:year+"-"+String(month).padStart(2,"0"),rows:total,
+   filled,missing,door_rows:rows.door.length,officer_rows:rows.officer.length,
+   synthetic_only:true,preview_only:true,importable_as_v7_backup:false,
+   operationally_certified:false,full_v7_rule_parity_verified:false,
+   real_iphone_safari_verified:false
+  },null,2);
+  combinedDetails.hidden=false;combinedDetails.open=false;
+  combinedStatus.textContent="✅ 589 班虛構合併預覽已通過獨立核對；缺班 "+missing+" 班";
+ }catch(e){
+  clearCombinedView();combinedStatus.textContent="❌ 合併預覽拒絕使用";
+  combinedOutput.textContent=String(e&&e.message||e);
+ }
+});
+__IPHONE_SELF_CHECK__
 </script></body></html>"""
 
 
@@ -357,7 +709,15 @@ def make(js, wasm_b64, proof, fixtures, out):
     # No user-supplied records; preserve generated glue without script breakout.
     js = re.sub(r"</script", r"<\/script", js, flags=re.IGNORECASE)
     chunks = [wasm_b64[i:i+4096] for i in range(0, len(wasm_b64), 4096)]
+    worker_script=(Path(__file__).resolve().parents[1] / "src" /
+                   "phase5_hardship_worker.js").read_text("utf-8")
+    worker_safe=json.dumps(worker_script,ensure_ascii=False).replace("&",r"\u0026").replace("<",r"\u003c").replace(">",r"\u003e")
+    phone_script=(Path(__file__).resolve().parents[1] / "src" /
+                  "phase5_iphone_selfcheck.js").read_text("utf-8")
+    phone_script=re.sub(r"</script",r"<\\/script",phone_script,flags=re.IGNORECASE)
     text = (HTML.replace("__GLUE__", js)
+            .replace("__IPHONE_SELF_CHECK__",phone_script)
+            .replace("__WORKER_BOOTSTRAP__",worker_safe)
             .replace("__WASM_PARTS__", " +\n".join(json.dumps(x) for x in chunks))
             # JSON is inside a script element: escape HTML/script breakers
             # even when the fixture is tied to a genuine Node proof digest.

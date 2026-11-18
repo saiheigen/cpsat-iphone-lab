@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-"""Actual offline Chromium three-stage hardship OR-Tools WebAssembly acceptance.
+"""Actual offline Chromium/WebKit three-stage hardship OR-Tools WASM acceptance.
 
-This tests a REAL solver inside desktop and mobile-sized Linux Chromium.
-It DOES NOT prove iPhone Safari, production duty rules or hardship fairness.
+This tests a REAL solver in Linux desktop and mobile-sized browser engines.
+Linux WebKit and Chromium are NOT a physical iPhone Safari or operational approval.
 Any fake HTML containing only JavaScript results cannot satisfy the expected
 page and runtime provenance without also passing Node proof + checksums.
 """
@@ -21,28 +21,88 @@ CASES = {
 }
 
 
-def run(browser, html: Path, mobile: bool):
-    name="mobile-chromium-emulation" if mobile else "desktop-chromium"
+def run(browser, html: Path, mobile: bool, engine: str = "chromium",
+        network_policy: str = "browser-offline"):
+    name=("mobile-"+engine+"-emulation" if mobile else "desktop-"+engine)
     ctx=browser.new_context(
         viewport={"width":390,"height":844} if mobile else
                  {"width":1280,"height":800},
         device_scale_factor=3 if mobile else 1,
-        is_mobile=mobile,has_touch=mobile,offline=True)
-    page=ctx.new_page()
+        is_mobile=mobile,has_touch=mobile,offline=network_policy=="browser-offline")
+    # Keep the engine online only to allow its internal blob: Worker loader.
+    # Every HTTP(S) request is aborted by Playwright before network egress.
+    # Unlike offline=True, this is NOT airplane-mode simulation.
+    if network_policy=="deny-external":
+        ctx.route("http://**/*",lambda route:route.abort())
+        ctx.route("https://**/*",lambda route:route.abort())
     network=[]
     errors=[]
-    page.on("request",lambda request:
-            network.append(request.url) if request.url.startswith(
-                ("http://","https://")) else None)
-    page.on("pageerror",lambda err:errors.append(str(err)))
+    def capture_events(p):
+        p.on("request",lambda request:
+             network.append(request.url) if request.url.startswith(
+                 ("http://","https://")) else None)
+        p.on("pageerror",lambda err:errors.append(str(err)))
+    page=ctx.new_page()
+    capture_events(page)
     started=time.monotonic()
-    record={"profile":name,"real_iphone_safari":False,
-            "offline":True,"cases":[]}
+    record={"profile":name,"engine":engine,"browser_version":browser.version,
+            "physical_iphone":False,"real_iphone_safari":False,
+            "offline":network_policy=="browser-offline",
+            "network_policy":network_policy,
+            "external_http_blocked_by_routing":network_policy=="deny-external",
+            "cases":[]}
     try:
-        page.goto(html.resolve().as_uri(),wait_until="domcontentloaded",
-                  timeout=90000)
-        for case,(shift_count,staff,filled) in CASES.items():
+        if engine=="webkit":
+            # Linux WebKit may reject file:// in its sandbox. Probe separately
+            # and never report a successful in-memory run as a file:// pass.
+            try:
+                page.goto(html.resolve().as_uri(),wait_until="domcontentloaded",
+                          timeout=90000)
+                record["file_url_navigation"]="success"
+                record["page_load_method"]="file_url"
+            except Exception as file_error:
+                record["file_url_navigation"]="failed"
+                record["file_url_error"]=str(file_error).split("\\n",1)[0][:220]
+                page.close()
+                page=ctx.new_page()
+                capture_events(page)
+                page.goto("about:blank",wait_until="domcontentloaded")
+                page.set_content(html.read_text(encoding="utf-8"),
+                                 wait_until="domcontentloaded",timeout=90000)
+                record["page_load_method"]="in_memory_local_html_bytes"
+        else:
+            page.goto(html.resolve().as_uri(),wait_until="domcontentloaded",
+                      timeout=90000)
+            record["file_url_navigation"]="success"
+            record["page_load_method"]="file_url"
+        if (engine=="webkit" and network_policy=="deny-external" and
+                record.get("page_load_method")!="file_url"):
+            raise AssertionError("WebKit file URL must load before Worker proof")
+        page.evaluate("""() => {
+            let last=performance.now();
+            window.__phase5HeartbeatMaxGap=0;
+            window.__phase5HeartbeatCount=0;
+            window.__phase5HeartbeatTimer=setInterval(()=>{
+                const now=performance.now();
+                window.__phase5HeartbeatMaxGap=Math.max(
+                    window.__phase5HeartbeatMaxGap,now-last);
+                window.__phase5HeartbeatCount++;
+                last=now;
+            },100);
+        }""")
+        if page.locator("#combined-run").is_enabled() or page.locator("#combined-preview").is_visible():
+            raise AssertionError("Unproven two-pool preview already enabled")
+        for index,(case,(shift_count,staff,filled)) in enumerate(CASES.items()):
             page.locator("#scenario").select_option(case)
+            if index:
+                if "請重新執行求解" not in page.locator("#status").inner_text():
+                    raise AssertionError("Old case falsely remains approved after selection")
+                if (page.locator("#vacancy-details").is_visible() or
+                        page.locator("#vacancy-details").get_attribute("open") is not None or
+                        page.locator("#vacancy-list li").count() or
+                        page.locator("#roster-preview").is_visible() or
+                        page.locator("#roster-days li").count()):
+                    raise AssertionError("Old case preview or vacancy state remained active")
             page.locator("#run").click(timeout=30000)
             page.wait_for_function(
                 """() => {
@@ -65,6 +125,63 @@ def run(browser, html: Path, mobile: bool):
                 if result.get(key)!=expected:
                     raise AssertionError("Incorrect night/noon/long-shift hardship browser field "+
                                          key+": "+text[:500])
+            mode=result.get("execution_mode")
+            if mode not in ("dedicated-worker","main-thread-fallback"):
+                raise AssertionError("Missing true execution mode provenance")
+            if (engine=="chromium" or network_policy=="deny-external") and mode!="dedicated-worker":
+                raise AssertionError("Required dedicated Worker not used under policy "+
+                                     network_policy+" in "+engine)
+            if (result["elapsed_ms"]>=5000 and mode=="dedicated-worker" and
+                    page.evaluate("window.__phase5HeartbeatMaxGap")>2500):
+                raise AssertionError("Worker solver stalled browser main thread")
+            vacancies=result.get("vacancies")
+            if (not isinstance(vacancies,list) or
+                    len(vacancies)!=shift_count-filled or
+                    len({(v.get("day"),v.get("slot")) for v in vacancies})!=len(vacancies)):
+                raise AssertionError("Missing or duplicated unfilled-shift list")
+            summary=page.locator("#summary").inner_text()
+            if ("已排 "+str(filled)+" 班" not in summary or
+                    "缺班 "+str(shift_count-filled)+" 班" not in summary):
+                raise AssertionError("Incorrect visible vacancy summary")
+            details=page.locator("#vacancy-details")
+            expected_days=len({v["day"] for v in vacancies})
+            if vacancies:
+                if not details.is_visible():
+                    raise AssertionError("Full vacancy list is hidden")
+                if page.locator("#vacancy-list li").count()!=expected_days:
+                    raise AssertionError("Grouped vacancy days do not match solver")
+                if details.get_attribute("open") is not None:
+                    raise AssertionError("New vacancy list must start collapsed")
+                page.locator("#vacancy-title").click()
+                if not page.locator("#vacancy-list").is_visible():
+                    raise AssertionError("Vacancy details cannot be expanded")
+                lines=page.locator("#vacancy-list li").all_inner_texts()
+                for v in vacancies:
+                    line=next((line for line in lines if line.startswith(
+                        str(v["day"])+"日：")),None)
+                    if line is None:
+                        raise AssertionError("Vacancy day not displayed")
+                    if "第"+str(v["slot"])+"班" not in line:
+                        raise AssertionError("Vacancy slot not displayed on correct day")
+            elif details.is_visible() or page.locator("#vacancy-list li").count():
+                raise AssertionError("Stale vacancy list remains after complete fill")
+            roster=page.locator("#roster-preview")
+            if not roster.is_visible():
+                raise AssertionError("Full synthetic-month roster preview is hidden")
+            if roster.get_attribute("open") is not None:
+                raise AssertionError("New roster preview should start collapsed")
+            if page.locator("#roster-days .roster-day").count()!=shift_count//(12 if case.startswith("door") or case=="tiny" else 7):
+                raise AssertionError("Missing one or more preview days")
+            if page.locator("#roster-days li").count()!=shift_count:
+                raise AssertionError("Truncated synthetic-month roster preview")
+            roster.locator("summary").click()
+            if not page.locator("#roster-days").is_visible():
+                raise AssertionError("Synthetic-month roster cannot be expanded")
+            preview_lines=page.locator("#roster-days li").all_inner_texts()
+            if sum("｜缺班" in line for line in preview_lines)!=shift_count-filled:
+                raise AssertionError("Preview hides or changes unfilled shifts")
+            if any("虛構人員" not in line and "缺班" not in line for line in preview_lines):
+                raise AssertionError("Preview has an unrecognized person or blank shift")
             if result.get("status") not in ("OPTIMAL","FEASIBLE"):
                 raise AssertionError("No legal WASM result")
             if result["final_abs_deviation"]>result["phase1_abs_deviation"]:
@@ -82,8 +199,13 @@ def run(browser, html: Path, mobile: bool):
                 raise AssertionError("Third-stage hardship score worsened or missing")
             if result.get("hardship_optimal_proven") and result["hardship_phase"]!="OPTIMAL":
                 raise AssertionError("False hardship optimality report")
+            if page.locator("#combined-run").is_enabled()!=(case=="door-forced-vacancies"):
+                raise AssertionError("Two-pool preview activation not proof-gated")
             record["cases"].append({
                 "name":case,"filled":result["filled"],
+                "execution_mode":mode,
+                "main_thread_max_heartbeat_gap_ms":round(page.evaluate(
+                    "window.__phase5HeartbeatMaxGap"),2),
                 "phase1_abs_deviation":result["phase1_abs_deviation"],
                 "final_abs_deviation":result["final_abs_deviation"],
                 "fill_phase":result["fill_phase"],"fair_phase":result["fair_phase"],
@@ -91,6 +213,210 @@ def run(browser, html: Path, mobile: bool):
                 "hardship_initial_score":before,
                 "hardship_final_score":after,
                 "elapsed_ms":result["elapsed_ms"],"accepted":True})
+        page.locator("#combined-run").click()
+        combined_status=page.locator("#combined-status").inner_text()
+        if "✅" not in combined_status or "缺班 12 班" not in combined_status:
+            raise AssertionError("Two-pool combined approval did not pass")
+        combined=json.loads(page.locator("#combined-output").inner_text())
+        for key,expected in {
+            "accepted":True,"format":"guard-cpsat-synthetic-preview-v1",
+            "schema_shape":"v7-month-schedule-rows-v1",
+            "month":"2026-12","rows":589,"filled":577,"missing":12,
+            "door_rows":372,"officer_rows":217,
+            "synthetic_only":True,"preview_only":True,
+            "importable_as_v7_backup":False,"operationally_certified":False,
+            "full_v7_rule_parity_verified":False,
+            "real_iphone_safari_verified":False,
+        }.items():
+            if combined.get(key)!=expected:
+                raise AssertionError("False combined v7 preview field "+key)
+        if not page.locator("#combined-preview").is_visible():
+            raise AssertionError("Combined roster details hidden")
+        if page.locator("#combined-days h3").count()!=2:
+            raise AssertionError("Both duty pools were not identified")
+        if page.locator("#combined-days .roster-day").count()!=62:
+            raise AssertionError("Combined roster lost a day")
+        if page.locator("#combined-days li").count()!=589:
+            raise AssertionError("Combined 589-shift preview was truncated")
+        page.locator("#combined-preview summary").click()
+        lines=page.locator("#combined-days li").all_inner_texts()
+        if sum("｜缺班" in line for line in lines)!=12:
+            raise AssertionError("Combined preview concealed missing shifts")
+        if not any("SIM_D_" in line for line in lines):
+            raise AssertionError("Missing anonymous door personnel")
+        if not any("SIM_O_" in line for line in lines):
+            raise AssertionError("Missing anonymous officer personnel")
+        page.locator("#scenario").select_option("tiny")
+        if (page.locator("#combined-preview").is_visible() or
+                page.locator("#combined-days li").count() or
+                '"accepted": true' in page.locator("#combined-output").inner_text()):
+            raise AssertionError("Stale combined preview survived scenario change")
+        record["combined_preview"]={
+            "accepted":True,"rows":combined["rows"],"filled":combined["filled"],
+            "missing":combined["missing"],"importable_as_v7_backup":False
+        }
+        # Physical-device reporting stays fail-closed even when the test
+        # deliberately selects "iPhone Safari" on desktop Linux.
+        page.locator("#phone-selfcheck summary").click()
+        if "4 / 4" not in page.locator("#phone-record-count").inner_text():
+            raise AssertionError("Synthetic session results were not collected")
+        page.locator("#phone-worker-probe").click()
+        page.wait_for_function(
+            "() => !document.getElementById('phone-worker-probe').disabled",
+            timeout=12000)
+        page.locator("#phone-open-method").select_option("physical-safari")
+        page.locator("#phone-network-mode").select_option("all-radios-off")
+        page.locator("#phone-is-physical").check()
+        page.locator("#phone-generate-evidence").click()
+        phone=json.loads(page.locator("#phone-evidence-json").input_value())
+        if phone.get("format")!="phase5-synthetic-iphone-selfcheck-v1":
+            raise AssertionError("Wrong iPhone evidence protocol")
+        if phone.get("browser_identity_independently_verified") is not False:
+            raise AssertionError("Browser identity fabricated")
+        if phone.get("physical_iphone_safari_verified") is not False:
+            raise AssertionError("Falsely approved a simulated iPhone")
+        if phone.get("operationally_certified") is not False:
+            raise AssertionError("Falsely approved operational use")
+        if phone.get("manual_physical_iphone_confirmation") is not True:
+            raise AssertionError("Missing explicit user confirmation provenance")
+        if phone.get("manually_selected_open_method")!="physical-safari":
+            raise AssertionError("Manual browser selection lost")
+        if phone.get("manually_selected_network_state")!="all-radios-off":
+            raise AssertionError("Manual network selection lost")
+        cases=phone.get("synthetic_cases")
+        if (not isinstance(cases,list) or len(cases)!=4 or
+                {x.get("scenario") for x in cases}!=set(CASES)):
+            raise AssertionError("Missing synthetic session records")
+        if phone.get("all_four_cases_observed") is not True:
+            raise AssertionError("Incomplete scenario evidence falsely accepted")
+        combined=phone.get("synthetic_combined_preview")
+        if (not isinstance(combined,dict) or combined.get("rows")!=589 or
+                combined.get("filled")!=577 or combined.get("missing")!=12 or
+                combined.get("importable_as_v7_backup") is not False):
+            raise AssertionError("Phone report lost 589-row fictitious preview")
+        probe=phone.get("worker_probe")
+        if not isinstance(probe,dict) or probe.get("wasm_validate") is not True:
+            raise AssertionError("Basic WASM self-test absent")
+        if (engine=="chromium" or network_policy=="deny-external") and probe.get("status")!="ready":
+            raise AssertionError("Actual Worker self-test failed")
+        if phone.get("unhandled_script_errors_observed")!=0:
+            raise AssertionError("Unhandled script error during phone self-check")
+        if "assignments" in json.dumps(phone):
+            raise AssertionError("Phone handoff exported raw roster assignments")
+        record["iphone_selfcheck"]={
+            "accepted":True,"synthetic_case_count":len(cases),
+            "manual_identity_cannot_certify_device":True,
+            "worker_probe":probe.get("status"),
+            "measured_heartbeat_gap_ms":phone["observed_main_thread_max_gap_ms"]
+        }
+        # Synthetic fault-injection: terminate the trusted Worker message
+        # path after READY. The app must fail closed, reset the transferred
+        # WASM state and recover a fresh Worker on the next request.
+        reset=page.locator("#reset-worker")
+        if not reset.is_enabled():
+            raise AssertionError("Cannot reset idle solver Worker")
+        reset.click()
+        if page.locator("#combined-run").is_enabled():
+            raise AssertionError("Old approved combined state survived restart")
+        if page.locator("#roster-days li").count() or page.locator("#combined-days li").count():
+            raise AssertionError("Old roster survived engine restart")
+        if "0 / 4" not in page.locator("#phone-record-count").inner_text():
+            raise AssertionError("Stale local iPhone evidence survived restart")
+        if page.locator("#phone-evidence-json").input_value():
+            raise AssertionError("Stale generated report survived restart")
+        recovery={"reset_cleared_approved_state":True,
+                  "fault_injected":False,"recovered":False}
+        worker_required=engine=="chromium" or network_policy=="deny-external"
+        if worker_required:
+            page.evaluate("""() => {
+              const NativeWorker=window.Worker;
+              let failNextSolve=true;
+              window.Worker=function(...args){
+                const worker=new NativeWorker(...args);
+                const post=worker.postMessage.bind(worker);
+                worker.postMessage=function(payload,transfers){
+                  if(failNextSolve && payload && payload.type==="solve"){
+                    failNextSolve=false;
+                    setTimeout(()=>worker.dispatchEvent(new Event("error",
+                      {cancelable:true})),0);
+                    return;
+                  }
+                  return post(payload,transfers);
+                };
+                return worker;
+              };
+              window.Worker.prototype=NativeWorker.prototype;
+            }""")
+            page.locator("#scenario").select_option("tiny")
+            page.locator("#run").click(timeout=30000)
+            page.wait_for_function(
+                "() => document.getElementById('status').textContent.includes('驗證失敗')",
+                timeout=30000)
+            if (page.locator("#roster-preview").is_visible() or
+                    page.locator("#combined-run").is_enabled()):
+                raise AssertionError("Injected Worker crash falsely approved roster")
+            recovery["fault_injected"]=True
+        page.locator("#scenario").select_option("tiny")
+        page.locator("#run").click(timeout=30000)
+        page.wait_for_function(
+            """() => {
+              const status=document.getElementById('status').textContent;
+              return status.includes('檢查通過')||status.includes('驗證失敗');
+            }""",timeout=30000)
+        if "檢查通過" not in page.locator("#status").inner_text():
+            raise AssertionError("Worker restart failed to recover tiny genuine WASM solve: "+
+                                 page.locator("#output").inner_text()[:900])
+        restarted=json.loads(page.locator("#output").inner_text())
+        if (restarted.get("accepted") is not True or
+                restarted.get("filled")!=4 or restarted.get("missing")!=368):
+            raise AssertionError("Restarted Worker did not recover genuine small-case oracle")
+        if worker_required and restarted.get("execution_mode")!="dedicated-worker":
+            raise AssertionError("Worker recovery unexpectedly fell back to blocking main thread")
+        if "1 / 4" not in page.locator("#phone-record-count").inner_text():
+            raise AssertionError("New session did not collect only the restarted result")
+        recovery["recovered"]=True
+        recovery["restart_execution_mode"]=restarted["execution_mode"]
+        record["worker_recovery"]=recovery
+        if worker_required:
+            # A longer real WASM job must be cancellable without publishing
+            # a half-computed or stale schedule.
+            page.locator("#scenario").select_option("door-blackouts-no-hints")
+            page.locator("#run").click(timeout=30000)
+            page.wait_for_timeout(700)
+            if not page.locator("#cancel-solve").is_enabled():
+                raise AssertionError("In-progress Worker solve cannot be cancelled")
+            page.locator("#cancel-solve").click(timeout=30000)
+            page.wait_for_function(
+                "() => document.getElementById('status').textContent.includes('計算已取消')",
+                timeout=10000)
+            if (page.locator("#roster-preview").is_visible() or
+                    page.locator("#combined-run").is_enabled() or
+                    page.locator("#roster-days li").count()):
+                raise AssertionError("Cancelled computation published stale roster")
+            if "0 / 4" not in page.locator("#phone-record-count").inner_text():
+                raise AssertionError("Cancelled computation retained old phone evidence")
+            if not page.locator("#run").is_enabled():
+                raise AssertionError("Cancelled Worker left run button disabled")
+            if page.locator("#cancel-solve").is_enabled():
+                raise AssertionError("Cancel button remains active after stopping")
+            page.locator("#scenario").select_option("tiny")
+            page.locator("#run").click(timeout=30000)
+            page.wait_for_function(
+                "() => document.getElementById('status').textContent.includes('檢查通過')",
+                timeout=30000)
+            after_cancel=json.loads(page.locator("#output").inner_text())
+            if (after_cancel.get("accepted") is not True or
+                    after_cancel.get("filled")!=4 or
+                    after_cancel.get("execution_mode")!="dedicated-worker"):
+                raise AssertionError("Worker could not recover after cancellation")
+            record["cancellation"]={
+                "cancelled_real_long_job":True,"stale_result_rejected":True,
+                "subsequent_genuine_worker_solve_passed":True
+            }
+        else:
+            record["cancellation"]={
+                "not_tested_reason":"WebKit offline emulator uses blocking main-thread fallback"
+            }
         if network:
             raise AssertionError("Page sent external HTTP request: "+str(network))
         if errors:
@@ -115,29 +441,45 @@ def run(browser, html: Path, mobile: bool):
 def main():
     parser=argparse.ArgumentParser()
     parser.add_argument("html",type=Path)
+    parser.add_argument("--browser",choices=("chromium","webkit"),default="chromium",
+                        help="WebKit is a Linux engine check, not physical iPhone Safari")
+    parser.add_argument("--network-policy",choices=("browser-offline","deny-external"),
+                        default="browser-offline",
+                        help="deny-external blocks all HTTP(S) through routing, but is not airplane mode")
     args=parser.parse_args()
     if not args.html.is_file() or args.html.stat().st_size<100000:
         raise SystemExit("Genuine full-month night/noon/long-shift hardship WASM HTML missing or too small")
     with sync_playwright() as p:
-        browser=p.chromium.launch(headless=True,args=["--no-sandbox"])
+        browser=(p.chromium.launch(headless=True,args=["--no-sandbox"])
+                 if args.browser=="chromium" else
+                 p.webkit.launch(headless=True))
         try:
-            runs=[run(browser,args.html,False),run(browser,args.html,True)]
+            runs=[run(browser,args.html,False,args.browser,args.network_policy),
+                  run(browser,args.html,True,args.browser,args.network_policy)]
         finally:
             browser.close()
     report={
         "accepted":all(x["accepted"] for x in runs),
-        "real_offline_chromium_executed":True,
+        "browser_engine":args.browser,
+        "network_policy":args.network_policy,
+        "linux_engine_only":True,
+        "real_offline_chromium_executed":args.browser=="chromium",
+        "real_offline_webkit_executed":args.browser=="webkit",
         "real_iphone_safari_verified":False,
         "complete_operational_roster_verified":False,
         "objective":"legal_fill_then_count_L1_then_locked_hardship_weighted_L1",
         "runs":runs
     }
-    Path("hardship_month_browser_proof.json").write_text(
+    report_path=("hardship_month_browser_proof.json" if args.browser=="chromium"
+                 else ("hardship_month_webkit_zero_egress_proof.json"
+                       if args.network_policy=="deny-external"
+                       else "hardship_month_webkit_proof.json"))
+    Path(report_path).write_text(
         json.dumps(report,ensure_ascii=False,indent=2)+"\n",
         encoding="utf-8")
     print(json.dumps(report,ensure_ascii=False,indent=2))
     if not report["accepted"]:
-        raise SystemExit("Real offline Chromium hardship WASM acceptance FAILED")
+        raise SystemExit("Real offline "+args.browser+" hardship WASM acceptance FAILED")
 
 
 if __name__=="__main__":

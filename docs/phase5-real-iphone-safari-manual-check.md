@@ -1,0 +1,89 @@
+# Physical iPhone Safari acceptance record (still pending)
+
+**This is a blank test record, not evidence that a phone test has passed.**
+The GitHub Actions runner is Linux Chromium, including its mobile-sized emulation. It does not certify physical Safari.
+
+## Obtain a verified, synthetic-only artifact
+
+1. On the repository's GitHub Actions page, locate **Phase 5 genuine offline UI end-to-end acceptance** and require a green successful run.
+2. Under the run's artifacts, download `phase5-genuine-offline-ui-e2e-evidence`. Confirm that it contains `experimental_full_month_hardship_cp_sat.html` and `hardship_month_browser_proof.json`.
+3. Confirm that the proof says `accepted: true` and `real_iphone_safari_tested: false`. Do not alter the single-page HTML.
+4. Transfer **only the synthetic demo HTML** to the test iPhone. Do not import any names, real dates of military duty, eligibility masks, schedules or private files into the demo.
+5. Record how the file was opened. A Files Quick Look preview, remote browser, iOS simulator or embedded webview **is not necessarily Safari**, and must not be labeled a Safari acceptance.
+
+## Device and offline-test record (fill in, do not pre-approve)
+
+| Field | Observed value |
+|---|---|
+| Date / local time | Not tested |
+| Physical iPhone model | Not tested |
+| iOS version | Not tested |
+| Browser app and version | Not tested |
+| File-loading method / URL scheme | Not tested |
+| Airplane mode and Wi-Fi/cellular disabled | Not tested |
+| Fresh offline page load successful | Not tested |
+| Reopen offline page successful | Not tested |
+| JavaScript/WASM runtime errors | Not tested |
+| Memory pressure, crash, or browser reload | Not tested |
+
+Test all four synthetic cases **in actual Safari while offline**. Never use fabricated operational data.
+
+| Synthetic case | Expected staffed / missing | Observed | Elapsed seconds | Result |
+|---|---|---|---|---|
+| `tiny` | 4 / 368 | Not tested | — | Pending |
+| `door-blackouts-no-hints` | 372 / 0 | Not tested | — | Pending |
+| `officer-blackouts-no-hints` | 217 / 0 | Not tested | — | Pending |
+| `door-forced-vacancies` | 360 / 12 | Not tested | — | Pending |
+
+## Two-pool read-only preview gate (pending physical Safari testing)
+
+After successfully running `officer-blackouts-no-hints` and `door-forced-vacancies` **in the same page session**, the **顯示大門＋安官 589 班預覽** control should become enabled. Before both audits pass, it must remain disabled.
+
+- Activate the combined preview. Verify `guard-cpsat-synthetic-preview-v1`, `rows=589`, `filled=577`, `missing=12`, `door_rows=372`, `officer_rows=217`.
+- Open the read-only combined detail and inspect both 31-day pools, 12 explicit vacancies and anonymous `SIM_D_...` / `SIM_O_...` identities.
+- Change the selected scenario; the combined preview must disappear instead of leaving an old approved result in view.
+- Verify `importable_as_v7_backup=false`, `operationally_certified=false`, `full_v7_rule_parity_verified=false` and `real_iphone_safari_verified=false`.
+- Record actual elapsed time and any iPhone memory pressure, freeze or page reload. **Do not claim Safari success based on Linux Chromium or a Files preview.**
+
+| Combined preview | Expected | Actual device observation | Result |
+|---|---|---|---|
+| Dual-pool WASM-audited rows | 589 total / 577 filled / 12 missing | Not tested | Pending |
+| Per-day display | 62 pool/day groups / 589 rows | Not tested | Pending |
+| Remains preview-only | Not importable, no operational certification | Not tested | Pending |
+
+Verify for each result:
+- The status explicitly says the independently audited genuine WASM solution succeeded.
+- The displayed staffed and missing counts match the JSON, and the full vacancy list shows every missing day/slot for a partial-fill case.
+- No stale vacancy list carries over when switching from a partial-fill case to a fully filled case.
+- The three objective stages and their proof/optimality flags are represented faithfully; do not mistake `FEASIBLE` for `OPTIMAL`.
+- There is no internet requirement for page load or solve; explicitly note any unexpected external request.
+
+**Fail closed:** Any failed case, unexpected script error, hidden missing shift, browser crash, unresolved loading method, or uncertain browser identity leaves physical-Safari acceptance **PENDING/FAILED**. Retest after a fix. Screenshots must only show synthetic data. This test does **not** certify a military operational roster or full absence/vehicle/inspection rules.
+
+## New on-device self-check and copyable report (2026-11-18)
+
+The verified fictional standalone HTML now includes a collapsed **「📱 iPhone Safari 實機自檢與測試紀錄」** panel. It needs no account, no network calls, no names and no imported duty data. The generated JSON stays on the device until the user explicitly copies or shares it. It intentionally excludes all raw assignment arrays and eligibility masks.
+
+Suggested real-device procedure:
+
+1. On the physical iPhone, sign in to GitHub and open the latest **successful** `Phase 5 genuine offline UI end-to-end acceptance` workflow run; download `phase5-genuine-offline-ui-e2e-evidence`, then unpack `experimental_full_month_hardship_cp_sat.html` using Files.
+2. **Confirm the browser actually displaying the page.** Opening HTML from Files may use Quick Look or an embedded viewer rather than Safari. If Safari cannot open the file, do not call Quick Look a Safari test. Do not enable GitHub Pages or publicly host this private-repository experiment without an explicit separate deployment decision.
+3. Open the self-check panel and select the actual opening method. Only select **「實體 iPhone 的 Safari App」** when you verified the Safari app; otherwise select Quick Look, embedded viewer, or unknown. Tick the physical-device confirmation only if true.
+4. With Wi-Fi and cellular data both off if testing real network loss (do not infer this from `navigator.onLine`), select the matching manual network state. Tap **「檢查本機 WebAssembly 與背景 Worker」** and note `ready`, `error` or `unavailable`.
+5. Run four synthetic cases as available, inspect each `execution_mode` and `elapsed_ms`, and combine the two proven month pools. The self-check panel automatically records only their non-sensitive outcome metrics and the synthetic combined **589 / 577 / 12** counts.
+6. Tap **「產生不含班表與姓名的測試紀錄」**, review the local JSON and use **「複製測試紀錄」**. If clipboard access fails (common for some local-file contexts), the textarea is selected for manual Copy.
+7. Share only the resulting fictional JSON and observed browser-loading behavior. Never upload actual military personnel, availability, patrol or approved schedules to a public repository or into the diagnostic report.
+
+The report format is `phase5-synthetic-iphone-selfcheck-v1`. Its `manually_selected_open_method` and `manual_physical_iphone_confirmation` are **self-reported**, and `browser_identity_independently_verified=false`, `physical_iphone_safari_verified=false`, `operationally_certified=false` remain false even after a user selects Safari. They are never automatically promoted based on the user agent or a simulated browser. Actual real-device acceptance requires separate review of the user's observations.
+
+The heartbeat metric (`observed_main_thread_max_gap_ms`) includes this tab's foreground runtime and is not a battery, memory or guaranteed interactive latency benchmark; backgrounding/suspending the tab makes it less comparable. A `dedicated-worker` solve result plus a `ready` basic Worker self-check helps narrow a problem, but does not certify every iOS variant.
+
+**Privacy:** The GitHub repository remains private. This stage only updates proof-gated test artifacts; no automatic public deployment is performed.
+
+## Release decision
+
+- Offline Chromium CI: require a green `Phase 5 genuine offline UI end-to-end acceptance` run.
+- Physical iPhone Safari: **PENDING**, until the table above contains actual observations.
+- v7.0 operational schema and rule completeness: **PENDING**.
+- Security review for real military data: **PENDING**.
+- v2/v3 regression artifacts: preserve; do not overwrite.
