@@ -1,5 +1,6 @@
 // EXPERIMENTAL full-calendar THREE-stage CP-SAT WASM with protected hardship.
-// Stage 1 maximizes legal fill; stage 2 locks achieved fill and minimizes
+// Stage 1 protects validated input fill and skips search at the fill upper
+// bound. Stage 2 locks achieved fill and minimizes
 // total absolute difference from per-person soft integer targets.
 // Stage 3 fixes occupied shift positions AND stage-2 achieved L1 count deviation,
 // then minimizes normalized night/noon and officer long-hours exposure.
@@ -10,6 +11,7 @@
 // guard-month-v2 is *not* assignment-v1. Two duty pools are solved
 // separately, each must include every calendar shift; NO chunking.
 // Single-threaded, bounded model with strict validation and time limit.
+#include <algorithm>
 #include <array>
 #include <cstdlib>
 #include <exception>
@@ -19,6 +21,7 @@
 #include <utility>
 #include <vector>
 #include "ortools/sat/cp_model.h"
+#include "ortools/sat/cp_model_checker.h"
 #include "ortools/sat/cp_model_solver.h"
 #include "ortools/sat/sat_parameters.pb.h"
 #ifdef __EMSCRIPTEN__
@@ -30,12 +33,16 @@
 
 using operations_research::sat::BoolVar;
 using operations_research::sat::CpModelBuilder;
+using operations_research::sat::CpSolverResponse;
 using operations_research::sat::CpSolverStatus;
+using operations_research::sat::IntVar;
 using operations_research::sat::LinearExpr;
 using operations_research::sat::Model;
 using operations_research::sat::NewSatParameters;
 using operations_research::sat::SatParameters;
 using operations_research::sat::SolutionBooleanValue;
+using operations_research::sat::SolutionIntegerValue;
+using operations_research::sat::SolutionIsFeasible;
 using operations_research::sat::SolveCpModel;
 namespace {
 std::string output;
@@ -97,6 +104,18 @@ int hardship_weight(bool door,int c){
   if(door)return (c==4||c==5)?2:1;
   return c==3?1:2;
 }
+
+// A solution belongs to the model prefix that produced it. New auxiliary
+// variables receive their exact values as the next phase creates them.
+void replace_hint(CpModelBuilder& model, const CpSolverResponse& solution,
+                  int prefix_size) {
+  if (prefix_size > solution.solution_size())
+    throw std::logic_error("Missing incumbent variable");
+  model.ClearHints();
+  for (int i = 0; i < prefix_size; ++i)
+    model.AddHint(model.GetIntVarFromProtoIndex(i), solution.solution(i));
+}
+
 std::string solve_payload(const std::string& payload){
   if(payload.size()>200000)return kInvalid;
   std::istringstream stream(payload);
@@ -130,6 +149,8 @@ std::string solve_payload(const std::string& payload){
   for(int t:targets)if(t<0 || t>count)return kInvalid;
 
   CpModelBuilder model;
+  std::vector<int> baseline_staff = hints;
+  std::vector<int> baseline_true_vars;
   std::vector<std::vector<BoolVar>> vars(count);
   std::vector<std::vector<int>> index(count,std::vector<int>(staff,-1));
   LinearExpr objective;
@@ -151,15 +172,11 @@ std::string solve_payload(const std::string& payload){
       if(index[i][pins[i]]<0)return kInvalid;
       model.AddEquality(vars[i][index[i][pins[i]]],1);
     }
-    if(hints[i]>=0){
-      if(index[i][hints[i]]<0 ||
-         (pins[i]>=0 && pins[i]!=hints[i]) || pins[i]==-1)
-        return kInvalid;
-      for(int p=0;p<staff;++p){
-        if(index[i][p]>=0)
-          model.AddHint(vars[i][index[i][p]], p==hints[i]);
-      }
-    }
+    if(hints[i]>=0 && (index[i][hints[i]]<0 ||
+       (pins[i]>=0 && pins[i]!=hints[i]) || pins[i]==-1))return kInvalid;
+    if(pins[i]>=0)baseline_staff[i]=pins[i];
+    const int person=baseline_staff[i];
+    if(person>=0)baseline_true_vars.push_back(vars[i][index[i][person]].index());
   }
   // Full month constraints are built from the fixed v7 shift scheme.
   // All pairwise person conflicts remain within the same pool and do not
@@ -172,25 +189,31 @@ std::string solve_payload(const std::string& payload){
     for(int d=0;d<days;++d){
       LinearExpr total;
       LinearExpr staying;
+      bool baseline_on=false, baseline_stay=false;
       for(int k=0;k<slots;++k){
         const int s=d*slots+k;
         if(index[s][p]<0)continue;
         const BoolVar x=vars[s][index[s][p]];
         total+=x;
+        if(baseline_staff[s]==p)baseline_on=true;
         if(weekday(year,month,d+1)==0 &&
-           ((door && k>=4 && k<=10) || (!door && k==6)))
+           ((door && k>=4 && k<=10) || (!door && k==6))){
           staying+=x;
+          if(baseline_staff[s]==p)baseline_stay=true;
+        }
       }
       BoolVar on=model.NewBoolVar();
       const int daycap=door?3:1;
       model.AddLessOrEqual(total,daycap*on);
       model.AddGreaterOrEqual(total,on);
       active.push_back(on);
+      if(baseline_on)baseline_true_vars.push_back(on.index());
 
       BoolVar stay=model.NewBoolVar();
       model.AddGreaterOrEqual(staying,stay);
       model.AddLessOrEqual(staying,daycap*stay);
       standby.push_back(stay);
+      if(baseline_stay)baseline_true_vars.push_back(stay.index());
 
       if(d>=1)model.AddLessOrEqual(active[d-1]+active[d],1);
       if(d>=7&&weekday(year,month,d+1)==0)
@@ -217,26 +240,54 @@ std::string solve_payload(const std::string& payload){
       }
     }
   }
-  model.Maximize(objective);
+  // Check the exact model, including pins and rest. An invalid combination
+  // of otherwise well-formed hints can guide search, but is never a fallback.
+  const int base_vars=model.Build().variables_size();
+  CpSolverResponse baseline;
+  baseline.mutable_solution()->Resize(base_vars,0);
+  for(int i:baseline_true_vars)baseline.set_solution(i,1);
+  const int baseline_fill=std::count_if(baseline_staff.begin(),baseline_staff.end(),
+                                        [](int person){return person>=0;});
+  const int upper=count-std::count(pins.begin(),pins.end(),-1);
+  // An unhinted, unconstrained vacancy is not evidence of a supplied roster.
+  const bool valid_baseline=(baseline_fill>0 || upper==0) &&
+      SolutionIsFeasible(model.Build(),
+          {baseline.solution().data(),static_cast<size_t>(base_vars)});
+  const bool skip_fill=valid_baseline && baseline_fill==upper;
+  if(valid_baseline)model.AddGreaterOrEqual(objective,baseline_fill);
+  if(std::any_of(hints.begin(),hints.end(),[](int p){return p>=0;}))
+    replace_hint(model,baseline,base_vars);
+
   SatParameters params;
   params.set_num_search_workers(1);
   params.set_max_time_in_seconds(10.0);
-  Model sat_model;
-  sat_model.Add(NewSatParameters(params));
-  const auto first=SolveCpModel(model.Build(),&sat_model);
-  const auto status=first.status();
-  const bool has_fill=(status==CpSolverStatus::OPTIMAL ||
-                       status==CpSolverStatus::FEASIBLE);
-  const char* fill_label=status==CpSolverStatus::OPTIMAL?"OPTIMAL":
-                       status==CpSolverStatus::FEASIBLE?"FEASIBLE":
-                       status==CpSolverStatus::INFEASIBLE?"INFEASIBLE":"UNKNOWN";
+  params.set_repair_hint(true);
+  CpSolverResponse fill_search;
+  if(!skip_fill){
+    model.Maximize(objective);
+    Model sat_model;
+    sat_model.Add(NewSatParameters(params));
+    fill_search=SolveCpModel(model.Build(),&sat_model);
+  }
+  const auto status=fill_search.status();
+  if(status==CpSolverStatus::MODEL_INVALID ||
+     (valid_baseline && status==CpSolverStatus::INFEASIBLE))
+    throw std::logic_error("Fill model conflicts with checked incumbent");
+  const bool found_fill=status==CpSolverStatus::OPTIMAL || status==CpSolverStatus::FEASIBLE;
+  const std::string search_label=skip_fill?"NOT_RUN":CpSolverStatus_Name(status);
   std::ostringstream result;
-  if(!has_fill){
-    result<<"{\"status\":\""<<fill_label<<"\",\"fill_phase\":\""<<fill_label
+  if(!found_fill && !valid_baseline){
+    result<<"{\"status\":\""<<search_label<<"\",\"fill_phase\":\""<<search_label
           <<"\",\"fair_phase\":\"NOT_RUN\",\"fill_optimal_proven\":false"
           <<",\"fair_optimal_proven_given_fill\":false,\"hardship_phase\":\"NOT_RUN\"}";
     return result.str();
   }
+  const auto searched_fill=found_fill?SolutionIntegerValue(fill_search,objective):-1;
+  if(valid_baseline && found_fill && searched_fill<baseline_fill)
+    throw std::logic_error("Violated fill floor");
+  const bool use_baseline=valid_baseline && searched_fill<=baseline_fill;
+  const auto& first=use_baseline?baseline:fill_search;
+  const char* fill_label=(skip_fill || status==CpSolverStatus::OPTIMAL)?"OPTIMAL":"FEASIBLE";
   int locked=0;
   std::vector<int> first_counts(staff,0);
   for(int s=0;s<count;++s)for(int p=0;p<staff;++p){
@@ -248,7 +299,9 @@ std::string solve_payload(const std::string& payload){
   int first_cost=0;
   for(int p=0;p<staff;++p)first_cost+=std::abs(first_counts[p]-targets[p]);
   model.AddEquality(objective,locked);
+  replace_hint(model,first,base_vars);
   LinearExpr fairness;
+  std::vector<IntVar> count_deviations;
   for(int p=0;p<staff;++p){
     LinearExpr assigned;
     for(int s=0;s<count;++s){
@@ -256,13 +309,18 @@ std::string solve_payload(const std::string& payload){
     }
     const auto deviation=model.NewIntVar({0,count});
     model.AddAbsEquality(deviation,assigned-targets[p]);
+    count_deviations.push_back(deviation);
+    model.AddHint(deviation,std::abs(first_counts[p]-targets[p]));
     fairness+=deviation;
   }
+  model.AddLessOrEqual(fairness,first_cost);
   model.Minimize(fairness);
   Model fair_model;
   fair_model.Add(NewSatParameters(params));
   const auto second=SolveCpModel(model.Build(),&fair_model);
   const auto fair_status=second.status();
+  if(fair_status==CpSolverStatus::MODEL_INVALID || fair_status==CpSolverStatus::INFEASIBLE)
+    throw std::logic_error("Fairness model conflicts with checked incumbent");
   const bool fair_found=fair_status==CpSolverStatus::OPTIMAL ||
                         fair_status==CpSolverStatus::FEASIBLE;
   const char* fair_label=fair_status==CpSolverStatus::OPTIMAL?"OPTIMAL":
@@ -279,12 +337,19 @@ std::string solve_payload(const std::string& payload){
   }
   if(fair_status==CpSolverStatus::OPTIMAL && second_cost>first_cost)
     throw std::runtime_error("Fairness optimum worse than a feasible incumbent");
-  const bool use_second=fair_found && second_cost<=first_cost;
+  // On a tie retain the previous assignment so its hardship cannot regress.
+  const bool use_second=fair_found && second_cost<first_cost;
   const auto* selected=use_second?&second:&first;
   const int chosen_cost=use_second?second_cost:first_cost;
   // No stage-3 optimization can create a new missing shift, sacrifice a
   // previously covered shift, or worsen the achieved second-stage L1 cost.
   model.AddEquality(fairness,chosen_cost);
+  replace_hint(model,*selected,base_vars);
+  for(int p=0;p<staff;++p){
+    const auto deviation=count_deviations[p];
+    model.AddHint(deviation,use_second?second.solution(deviation.index()):
+                  std::abs(first_counts[p]-targets[p]));
+  }
   std::vector<int> occupied(count,0);
   for(int s=0;s<count;++s){
     LinearExpr one;
@@ -333,41 +398,44 @@ std::string solve_payload(const std::string& payload){
       }
       // 12*count^2 safely bounds scaled officer hours and night/noon terms.
       const auto dev=model.NewIntVar({0,12*count*count});
-      model.AddAbsEquality(dev,locked*load-category_totals[c]*assigned);
+      const LinearExpr imbalance=locked*load-category_totals[c]*assigned;
+      model.AddAbsEquality(dev,imbalance);
+      model.AddHint(dev,std::abs(SolutionIntegerValue(*selected,imbalance)));
       hardship+=hardship_weight(door,c)*dev;
     }
   }
+  model.AddLessOrEqual(hardship,prior_hardship);
   model.Minimize(hardship);
   Model harsh_model;
   harsh_model.Add(NewSatParameters(params));
   const auto third=SolveCpModel(model.Build(),&harsh_model);
   const auto harsh_status=third.status();
+  if(harsh_status==CpSolverStatus::MODEL_INVALID || harsh_status==CpSolverStatus::INFEASIBLE)
+    throw std::logic_error("Hardship model conflicts with checked incumbent");
   const bool harsh_found=harsh_status==CpSolverStatus::OPTIMAL ||
                          harsh_status==CpSolverStatus::FEASIBLE;
   const char* harsh_label=harsh_status==CpSolverStatus::OPTIMAL?"OPTIMAL":
                           harsh_status==CpSolverStatus::FEASIBLE?"FEASIBLE":
                           harsh_status==CpSolverStatus::INFEASIBLE?"INFEASIBLE":"UNKNOWN";
   long long selected_hardship=prior_hardship;
-  bool used_third=false;
   if(harsh_found){
     const long long new_score=hardship_score(third);
-    if(new_score<=prior_hardship){
+    if(new_score<prior_hardship){
       selected=&third;
       selected_hardship=new_score;
-      used_third=true;
-    }else if(harsh_status==CpSolverStatus::OPTIMAL){
+    }else if(new_score>prior_hardship && harsh_status==CpSolverStatus::OPTIMAL){
       throw std::runtime_error("Claimed hardship optimum worse than feasible prior");
     }
   }
-  const bool harsh_proven=used_third && harsh_status==CpSolverStatus::OPTIMAL;
+  const bool harsh_proven=harsh_status==CpSolverStatus::OPTIMAL;
 
-  int upper=count;
-  for(int s=0;s<count;++s)if(pins[s]==-1)--upper;
   const bool fill_proven=status==CpSolverStatus::OPTIMAL || locked==upper;
-  const bool fair_proven=use_second && fair_status==CpSolverStatus::OPTIMAL;
+  const bool fair_proven=fair_status==CpSolverStatus::OPTIMAL && second_cost==chosen_cost;
   const char* overall=fill_proven && fair_proven && harsh_proven?"OPTIMAL":"FEASIBLE";
   result<<"{\"status\":\""<<overall<<"\",\"fill_phase\":\""<<fill_label
-        <<"\",\"fair_phase\":\""<<fair_label<<"\""
+        <<"\",\"fill_search_status\":\""<<search_label
+        <<"\",\"fill_used_baseline\":"<<(use_baseline?"true":"false")
+        <<",\"fair_phase\":\""<<fair_label<<"\""
         <<",\"fill_optimal_proven\":"<<(fill_proven?"true":"false")
         <<",\"fair_optimal_proven_given_fill\":"<<(fair_proven?"true":"false")
         <<",\"phase1_abs_deviation\":"<<first_cost

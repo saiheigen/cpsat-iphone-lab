@@ -144,6 +144,57 @@ function browserFixtureManifest(){
 function browserFixtureBytes(){
  return Buffer.from(JSON.stringify(browserFixtureManifest(),null,2)+'\n','utf8');
 }
+
+function checkIncumbentGuards(call) {
+ const shiftCount=360,staff=30;
+ const hints=Array.from({length:shiftCount},(_,i)=>{
+  const day=Math.floor(i/12);
+  // Leave two eligible people in each group unused by the initial roster.
+  return (day%2)*15+(i%12+Math.floor(day/2))%13;
+ });
+ const dense={year:2026,month:11,pool:'door',staff,shiftCount,hints,
+  pins:Array(shiftCount).fill(-2),allowed:'1'.repeat(shiftCount*staff)};
+ const targets=Array(staff).fill(12);
+ independentlyAudit(dense,{assignments:hints,filled:360,missing:0});
+ function run(s,goals) {
+  const result=call(wire(s,goals));
+  check(s,goals,result);
+  return result;
+ }
+ const full=run(dense,targets);
+ if(full.filled!==360 || !full.fill_optimal_proven ||
+    full.fill_search_status!=='NOT_RUN' || full.fill_used_baseline!==true ||
+    full.final_abs_deviation>countScore(hints,targets).deviation)
+  throw Error('Dense legal full incumbent was lost or searched again');
+
+ const partial={...dense,hints:hints.slice()};
+ partial.hints[0]=-1;
+ const repaired=run(partial,targets);
+ if(repaired.filled<359 || repaired.fill_search_status==='NOT_RUN')
+  throw Error('Lost partial incumbent or skipped remaining fill search');
+
+ // Empty pins are an upper bound; the two occupied slots may still swap staff.
+ const open=sparseFixture('officer',11,2,
+  [[1,5,0,false],[1,5,1,false],[4,5,0,false],[4,5,1,false]]);
+ open.pins.fill(-1);
+ for(const i of [4,25]){open.pins[i]=-2;open.hints[i]=0;}
+ const balanced=run(open,[1,1]);
+ if(balanced.filled!==2 || balanced.fill_search_status!=='NOT_RUN' ||
+    balanced.phase1_abs_deviation!==2 || balanced.final_abs_deviation!==0)
+  throw Error('Skipping fill froze staff choices or overwrote a vacancy');
+
+ // Individually eligible hints on consecutive days conflict as a schedule.
+ const conflict=sparseFixture('officer',11,1,[[1,5,0,false],[2,5,0,false]]);
+ conflict.pins.fill(-1);
+ for(const i of [4,11]){conflict.pins[i]=-2;conflict.hints[i]=0;}
+ const valid=run(conflict,[1]);
+ if(valid.filled!==1 || valid.fill_search_status==='NOT_RUN' || valid.fill_used_baseline)
+  throw Error('An infeasible full hint became a fill floor or fallback');
+ return {dense_full:full.filled,dense_partial:repaired.filled,
+  pinned_vacancies_count_deviation:balanced.final_abs_deviation,
+  conflicting_hint_legal_fill:valid.filled};
+}
+
 async function main(){
  const [jsfile,wasmfile,outfile]=process.argv.slice(2);
  if(!jsfile||!wasmfile||!outfile)
@@ -199,6 +250,7 @@ async function main(){
  for(const input of invalidFrames)
   if(call(input).status!=='INVALID_INPUT')
    throw Error('Invalid v4 model accepted');
+ const incumbent_checks=checkIncumbentGuards(call);
  const proof={
   accepted:true,engine:'genuine-Google-OR-Tools-CP-SAT-WASM',
   contract:'guard-month-harsh-v4',three_phases:true,
@@ -209,7 +261,7 @@ async function main(){
   tested_full_589_dense_shifts:true,
   invalid_frames_rejected:invalidFrames.length,
   fixture_sha256:crypto.createHash('sha256').update(browserFixtureBytes()).digest('hex'),
-  cases,
+  cases,incumbent_checks,
   wasm_sha256:crypto.createHash('sha256').update(binary).digest('hex'),
   js_sha256:crypto.createHash('sha256').update(fs.readFileSync(jsfile)).digest('hex'),
   elapsed_ms:Date.now()-begin
@@ -232,4 +284,4 @@ if(require.main===module){
  }
 }
 module.exports={wire,categories,hardshipScore,exactToyOracle,preflight,
- toy,check,browserFixtureBytes,browserFixtureManifest};
+ toy,check,checkIncumbentGuards,browserFixtureBytes,browserFixtureManifest};
