@@ -15,6 +15,7 @@
 #include <array>
 #include <cstdlib>
 #include <exception>
+#include <numeric>
 #include <sstream>
 #include <stdexcept>
 #include <string>
@@ -46,7 +47,7 @@ using operations_research::sat::SolutionIsFeasible;
 using operations_research::sat::SolveCpModel;
 namespace {
 std::string output;
-constexpr const char* kInvalid="{\"status\":\"INVALID_INPUT\"}";
+constexpr const char* kInvalid="{\"status\":\"INVALID_INPUT\",\"baseline_valid\":false}";
 constexpr int kStartDoor[12]={22,0,2,4,6,8,10,12,14,16,18,20};
 constexpr int kEndDoor[12]={24,2,4,6,8,10,12,14,16,18,20,22};
 
@@ -116,13 +117,109 @@ void replace_hint(CpModelBuilder& model, const CpSolverResponse& solution,
     model.AddHint(model.GetIntVarFromProtoIndex(i), solution.solution(i));
 }
 
+bool can_take(int s,const std::vector<int>& jobs,int slots,bool door,int year,int month) {
+  const int d=s/slots, k=s%slots;
+  auto stay=[&](int slot){return door ? slot>=4 && slot<=10 : slot==6;};
+  int same_day=1;
+  for(int prior:jobs){
+    const int days_apart=std::abs(d-prior/slots), j=prior%slots;
+    if(days_apart==1 || (days_apart==2 && j==k))return false;
+    if(days_apart==7 && weekday(year,month,d+1)==0 && stay(k) && stay(j))return false;
+    if(days_apart!=0)continue;
+    if(!door || ++same_day>3)return false;
+    if(kEndDoor[j]+6>kStartDoor[k] && kEndDoor[k]+6>kStartDoor[j])return false;
+  }
+  return true;
+}
+
+// Audit the actual assignment against the wire, independently of the CP model,
+// before returning the input roster after a search timeout or an exception.
+bool audit_assignment(const std::vector<int>& a, const std::string& allowed,
+                      const std::vector<int>& pins, int staff, bool door,
+                      int year, int month) {
+  const int slots=door?12:7;
+  std::vector<std::vector<int>> jobs(staff);
+  for(int s=0;s<static_cast<int>(a.size());++s){
+    const int p=a[s];
+    if(p < -1 || p >= staff || (pins[s]!=-2 && pins[s]!=p))return false;
+    if(p==-1)continue;
+    if(allowed[s*staff+p]!='1')return false;
+    if(!can_take(s,jobs[p],slots,door,year,month))return false;
+    jobs[p].push_back(s);
+  }
+  return true;
+}
+
+std::string json_array(const std::vector<int>& a) {
+  std::ostringstream out;
+  out << '[';
+  for(size_t i=0;i<a.size();++i){if(i)out<<',';out<<a[i];}
+  out<<']';
+  return out.str();
+}
+
+// Only stable, internal diagnostic codes enter the wire response.
+struct StageFault {const char* code;};
+bool has_solution(CpSolverStatus status) {
+  return status==CpSolverStatus::FEASIBLE || status==CpSolverStatus::OPTIMAL;
+}
+std::string recovery_result(const char* phase, const char* reason,
+                            bool valid, const std::vector<int>& a,
+                            const std::string& allowed, const std::vector<int>& pins,
+                            const std::vector<int>& targets, bool door, int year, int month) {
+  const int staff=static_cast<int>(targets.size()), slots=door?12:7, cats=hardship_categories(door);
+  std::ostringstream out;
+  out<<"{\"failed_stage\":\""<<phase<<"\",\"failure_reason\":\""<<reason
+     <<"\",\"baseline_valid\":"<<(valid?"true":"false");
+  if(!valid || !audit_assignment(a,allowed,pins,staff,door,year,month)){
+    out<<",\"status\":\"SOLVER_ERROR\",\"fallback_audited\":false}";
+    return out.str();
+  }
+  std::vector<int> counts(staff), totals(cats);
+  std::vector<std::vector<int>> loads(staff,std::vector<int>(cats));
+  int filled=0, cost=0;
+  for(size_t s=0;s<a.size();++s){
+    if(a[s]<0)continue;
+    ++filled;
+    ++counts[a[s]];
+    for(int c=0;c<cats;++c){
+      const int units=hardship_units(door,s%slots,c);
+      totals[c]+=units;
+      loads[a[s]][c]+=units;
+    }
+  }
+  long long hardship=0;
+  for(int p=0;p<staff;++p){
+    cost+=std::abs(counts[p]-targets[p]);
+    for(int c=0;c<cats;++c)
+      hardship+=hardship_weight(door,c)*std::llabs(1LL*filled*loads[p][c]-1LL*totals[c]*counts[p]);
+  }
+  out<<",\"status\":\"FEASIBLE\",\"fallback_audited\":true,\"fill_used_baseline\":true"
+     <<",\"fill_phase\":\"FEASIBLE\",\"fair_phase\":\"UNKNOWN\",\"hardship_phase\":\"UNKNOWN\""
+     <<",\"fill_optimal_proven\":false,\"fair_optimal_proven_given_fill\":false"
+     <<",\"hardship_optimal_proven_given_locked_predecessors\":false"
+     <<",\"fixed_occupied_positions\":true,\"fairness_improved\":false,\"hardship_improved\":false"
+     <<",\"assignments\":"<<json_array(a)<<",\"actual_counts\":"<<json_array(counts)
+     <<",\"filled\":"<<filled<<",\"missing\":"<<a.size()-filled
+     <<",\"phase1_abs_deviation\":"<<cost<<",\"final_abs_deviation\":"<<cost
+     <<",\"hardship_initial_score\":"<<hardship<<",\"hardship_final_score\":"<<hardship<<"}";
+  return out.str();
+}
+
 std::string solve_payload(const std::string& payload){
   if(payload.size()>200000)return kInvalid;
   std::istringstream stream(payload);
   std::array<std::string,8> lines;
   for(auto& line:lines)if(!std::getline(stream,line))return kInvalid;
   std::string extra;
-  if(std::getline(stream,extra))return kInvalid;
+  // Optional ninth line: limits_ms=fill,fair,fair_retry,hardship.
+  std::vector<int> limits(4,10000);
+  if(std::getline(stream,extra)){
+    if(extra.rfind("limits_ms=",0)!=0)return kInvalid;
+    limits=integers(extra.substr(10));
+    if(limits.size()!=4 || std::any_of(limits.begin(),limits.end(),
+       [](int ms){return ms<0 || ms>60000;}) || std::getline(stream,extra))return kInvalid;
+  }
   if(lines[0]!="guard-month-harsh-v4"||lines[1].size()!=7||
      lines[1][4]!='-')return kInvalid;
   const int year=number(lines[1].substr(0,4));
@@ -181,6 +278,8 @@ std::string solve_payload(const std::string& payload){
   // Full month constraints are built from the fixed v7 shift scheme.
   // All pairwise person conflicts remain within the same pool and do not
   // require a quadratic explicit conflict-edge wire payload.
+  std::vector<std::vector<int>> active_index(staff,std::vector<int>(days));
+  std::vector<std::vector<int>> stay_index(staff,std::vector<int>(days));
   for(int p=0;p<staff;++p){
     std::vector<BoolVar> active;
     std::vector<BoolVar> standby;
@@ -207,12 +306,14 @@ std::string solve_payload(const std::string& payload){
       model.AddLessOrEqual(total,daycap*on);
       model.AddGreaterOrEqual(total,on);
       active.push_back(on);
+      active_index[p][d]=on.index();
       if(baseline_on)baseline_true_vars.push_back(on.index());
 
       BoolVar stay=model.NewBoolVar();
       model.AddGreaterOrEqual(staying,stay);
       model.AddLessOrEqual(staying,daycap*stay);
       standby.push_back(stay);
+      stay_index[p][d]=stay.index();
       if(baseline_stay)baseline_true_vars.push_back(stay.index());
 
       if(d>=1)model.AddLessOrEqual(active[d-1]+active[d],1);
@@ -254,13 +355,15 @@ std::string solve_payload(const std::string& payload){
       SolutionIsFeasible(model.Build(),
           {baseline.solution().data(),static_cast<size_t>(base_vars)});
   const bool skip_fill=valid_baseline && baseline_fill==upper;
+  const char* phase="fill";
+  try {
   if(valid_baseline)model.AddGreaterOrEqual(objective,baseline_fill);
   if(std::any_of(hints.begin(),hints.end(),[](int p){return p>=0;}))
     replace_hint(model,baseline,base_vars);
 
   SatParameters params;
   params.set_num_search_workers(1);
-  params.set_max_time_in_seconds(10.0);
+  params.set_max_time_in_seconds(limits[0]/1000.0);
   params.set_repair_hint(true);
   CpSolverResponse fill_search;
   if(!skip_fill){
@@ -272,19 +375,19 @@ std::string solve_payload(const std::string& payload){
   const auto status=fill_search.status();
   if(status==CpSolverStatus::MODEL_INVALID ||
      (valid_baseline && status==CpSolverStatus::INFEASIBLE))
-    throw std::logic_error("Fill model conflicts with checked incumbent");
+    throw StageFault{"invalid_fill_model_or_inconsistent_floor"};
   const bool found_fill=status==CpSolverStatus::OPTIMAL || status==CpSolverStatus::FEASIBLE;
   const std::string search_label=skip_fill?"NOT_RUN":CpSolverStatus_Name(status);
   std::ostringstream result;
   if(!found_fill && !valid_baseline){
     result<<"{\"status\":\""<<search_label<<"\",\"fill_phase\":\""<<search_label
-          <<"\",\"fair_phase\":\"NOT_RUN\",\"fill_optimal_proven\":false"
+          <<"\",\"baseline_valid\":false,\"fair_phase\":\"NOT_RUN\",\"fill_optimal_proven\":false"
           <<",\"fair_optimal_proven_given_fill\":false,\"hardship_phase\":\"NOT_RUN\"}";
     return result.str();
   }
   const auto searched_fill=found_fill?SolutionIntegerValue(fill_search,objective):-1;
   if(valid_baseline && found_fill && searched_fill<baseline_fill)
-    throw std::logic_error("Violated fill floor");
+    throw StageFault{"violated_fill_floor"};
   const bool use_baseline=valid_baseline && searched_fill<=baseline_fill;
   const auto& first=use_baseline?baseline:fill_search;
   const char* fill_label=(skip_fill || status==CpSolverStatus::OPTIMAL)?"OPTIMAL":"FEASIBLE";
@@ -298,6 +401,7 @@ std::string solve_payload(const std::string& payload){
   }
   int first_cost=0;
   for(int p=0;p<staff;++p)first_cost+=std::abs(first_counts[p]-targets[p]);
+  phase="fair";
   model.AddEquality(objective,locked);
   replace_hint(model,first,base_vars);
   LinearExpr fairness;
@@ -315,39 +419,111 @@ std::string solve_payload(const std::string& payload){
   }
   model.AddLessOrEqual(fairness,first_cost);
   model.Minimize(fairness);
-  Model fair_model;
-  fair_model.Add(NewSatParameters(params));
-  const auto second=SolveCpModel(model.Build(),&fair_model);
-  const auto fair_status=second.status();
-  if(fair_status==CpSolverStatus::MODEL_INVALID || fair_status==CpSolverStatus::INFEASIBLE)
-    throw std::logic_error("Fairness model conflicts with checked incumbent");
-  const bool fair_found=fair_status==CpSolverStatus::OPTIMAL ||
-                        fair_status==CpSolverStatus::FEASIBLE;
-  const char* fair_label=fair_status==CpSolverStatus::OPTIMAL?"OPTIMAL":
-                         fair_status==CpSolverStatus::FEASIBLE?"FEASIBLE":
-                         fair_status==CpSolverStatus::INFEASIBLE?"INFEASIBLE":"UNKNOWN";
-  int second_cost=0;
-  if(fair_found){
-    std::vector<int> fair_counts(staff,0);
-    for(int s=0;s<count;++s)for(int p=0;p<staff;++p){
-      if(index[s][p]>=0 && SolutionBooleanValue(second,vars[s][index[s][p]]))
-        ++fair_counts[p];
+  auto solve_fair=[&](int budget_ms,bool repair_hint){
+    SatParameters attempt=params;
+    attempt.set_max_time_in_seconds(budget_ms/1000.0);
+    attempt.set_repair_hint(repair_hint);
+    Model solver;
+    solver.Add(NewSatParameters(attempt));
+    auto response=SolveCpModel(model.Build(),&solver);
+    if(response.status()==CpSolverStatus::MODEL_INVALID)
+      throw StageFault{"invalid_fair_model"};
+    if(response.status()==CpSolverStatus::INFEASIBLE)
+      throw StageFault{"incumbent_excluded"};
+    return response;
+  };
+  auto cost_of=[&](const CpSolverResponse& r){
+    if(!has_solution(r.status()))return first_cost;
+    const int cost=SolutionIntegerValue(r,fairness);
+    if(cost>first_cost)throw StageFault{"violated_fair_floor"};
+    return cost;
+  };
+  auto second=solve_fair(limits[1],true);
+  const auto warm_status=second.status();
+  const int warm_cost=cost_of(second);
+  int second_cost=warm_cost;
+  std::string retry_label="NOT_RUN";
+  // L1 cannot be lower than the difference of the two count totals.
+  const int lower=std::abs(locked-std::accumulate(targets.begin(),targets.end(),0));
+  if(limits[2]>0 && warm_status!=CpSolverStatus::OPTIMAL &&
+     warm_cost==first_cost && warm_cost>lower){
+    phase="fair_retry";
+    model.ClearHints();
+    auto retry=solve_fair(limits[2],false);
+    retry_label=CpSolverStatus_Name(retry.status());
+    const int retry_cost=cost_of(retry);
+    if(has_solution(retry.status()) && (!has_solution(warm_status) ||
+       retry_cost<second_cost || retry.status()==CpSolverStatus::OPTIMAL)){
+      second=std::move(retry);
+      second_cost=retry_cost;
     }
-    for(int p=0;p<staff;++p)second_cost+=std::abs(fair_counts[p]-targets[p]);
   }
-  if(fair_status==CpSolverStatus::OPTIMAL && second_cost>first_cost)
-    throw std::runtime_error("Fairness optimum worse than a feasible incumbent");
-  // On a tie retain the previous assignment so its hardship cannot regress.
+  const auto fair_status=second.status();
+  const bool fair_found=has_solution(fair_status);
+  const std::string fair_label=CpSolverStatus_Name(fair_status);
+  const int search_cost=second_cost;
   const bool use_second=fair_found && second_cost<first_cost;
-  const auto* selected=use_second?&second:&first;
-  const int chosen_cost=use_second?second_cost:first_cost;
+  const CpSolverResponse* selected=use_second?&second:&first;
+  int chosen_cost=use_second?second_cost:first_cost;
+  CpSolverResponse balanced;
+  int transfers=0;
+  // If the CP attempts still leave count imbalance, transfer an unpinned
+  // assignment directly from a surplus to a deficit. Each move lowers L1 by
+  // two, leaves fill positions intact, and only adds duties to the receiver.
+  if(limits[2]>0 && chosen_cost>lower && fair_status!=CpSolverStatus::OPTIMAL){
+    phase="balance";
+    std::vector<int> assignment(count,-1), counts(staff);
+    std::vector<std::vector<int>> jobs(staff);
+    for(int s=0;s<count;++s)for(int p=0;p<staff;++p){
+      if(index[s][p]<0 || !SolutionBooleanValue(*selected,vars[s][index[s][p]]))continue;
+      assignment[s]=p; ++counts[p]; jobs[p].push_back(s);
+    }
+    for(int s=0;s<count && chosen_cost>lower;++s){
+      const int from=assignment[s];
+      if(from<0 || pins[s]!=-2 || counts[from]<=targets[from])continue;
+      int best=-1, deficit=0;
+      for(int p=0;p<staff;++p){
+        const int need=targets[p]-counts[p];
+        if(need>deficit && index[s][p]>=0 && can_take(s,jobs[p],slots,door,year,month)){
+          best=p; deficit=need;
+        }
+      }
+      if(best<0)continue;
+      auto& previous=jobs[from];
+      previous.erase(std::find(previous.begin(),previous.end(),s));
+      jobs[best].push_back(s);
+      assignment[s]=best; --counts[from]; ++counts[best];
+      ++transfers; chosen_cost-=2;
+    }
+    if(transfers){
+      balanced.mutable_solution()->Resize(model.Build().variables_size(),0);
+      for(int s=0;s<count;++s){
+        const int p=assignment[s];
+        if(p<0)continue;
+        const int day=s/slots, k=s%slots;
+        balanced.set_solution(vars[s][index[s][p]].index(),1);
+        balanced.set_solution(active_index[p][day],1);
+        if(weekday(year,month,day+1)==0 && (door?(k>=4 && k<=10):k==6))
+          balanced.set_solution(stay_index[p][day],1);
+      }
+      for(int p=0;p<staff;++p)
+        balanced.set_solution(count_deviations[p].index(),std::abs(counts[p]-targets[p]));
+      if(!SolutionIsFeasible(model.Build(),{balanced.solution().data(),
+             static_cast<size_t>(balanced.solution_size())}) ||
+         SolutionIntegerValue(balanced,fairness)!=chosen_cost ||
+         !audit_assignment(assignment,lines[4],pins,staff,door,year,month))
+        throw StageFault{"transfer_failed_audit"};
+      selected=&balanced;
+    }
+  }
+  phase="hardship";
   // No stage-3 optimization can create a new missing shift, sacrifice a
   // previously covered shift, or worsen the achieved second-stage L1 cost.
   model.AddEquality(fairness,chosen_cost);
   replace_hint(model,*selected,base_vars);
   for(int p=0;p<staff;++p){
     const auto deviation=count_deviations[p];
-    model.AddHint(deviation,use_second?second.solution(deviation.index()):
+    model.AddHint(deviation,selected!=&first?selected->solution(deviation.index()):
                   std::abs(first_counts[p]-targets[p]));
   }
   std::vector<int> occupied(count,0);
@@ -406,12 +582,13 @@ std::string solve_payload(const std::string& payload){
   }
   model.AddLessOrEqual(hardship,prior_hardship);
   model.Minimize(hardship);
+  params.set_max_time_in_seconds(limits[3]/1000.0);
   Model harsh_model;
   harsh_model.Add(NewSatParameters(params));
   const auto third=SolveCpModel(model.Build(),&harsh_model);
   const auto harsh_status=third.status();
   if(harsh_status==CpSolverStatus::MODEL_INVALID || harsh_status==CpSolverStatus::INFEASIBLE)
-    throw std::logic_error("Hardship model conflicts with checked incumbent");
+    throw StageFault{"invalid_hardship_model_or_inconsistent_floor"};
   const bool harsh_found=harsh_status==CpSolverStatus::OPTIMAL ||
                          harsh_status==CpSolverStatus::FEASIBLE;
   const char* harsh_label=harsh_status==CpSolverStatus::OPTIMAL?"OPTIMAL":
@@ -424,17 +601,26 @@ std::string solve_payload(const std::string& payload){
       selected=&third;
       selected_hardship=new_score;
     }else if(new_score>prior_hardship && harsh_status==CpSolverStatus::OPTIMAL){
-      throw std::runtime_error("Claimed hardship optimum worse than feasible prior");
+      throw StageFault{"violated_hardship_bound"};
     }
   }
   const bool harsh_proven=harsh_status==CpSolverStatus::OPTIMAL;
 
+  phase="return";
+  if(selected==&baseline && !audit_assignment(baseline_staff,lines[4],pins,staff,door,year,month))
+    throw StageFault{"baseline_audit_failed"};
   const bool fill_proven=status==CpSolverStatus::OPTIMAL || locked==upper;
   const bool fair_proven=fair_status==CpSolverStatus::OPTIMAL && second_cost==chosen_cost;
   const char* overall=fill_proven && fair_proven && harsh_proven?"OPTIMAL":"FEASIBLE";
   result<<"{\"status\":\""<<overall<<"\",\"fill_phase\":\""<<fill_label
         <<"\",\"fill_search_status\":\""<<search_label
         <<"\",\"fill_used_baseline\":"<<(use_baseline?"true":"false")
+        <<",\"baseline_valid\":"<<(valid_baseline?"true":"false")
+        <<",\"fair_warm_status\":\""<<CpSolverStatus_Name(warm_status)<<"\""
+        <<",\"fair_warm_cost\":"<<warm_cost
+        <<",\"fair_search_cost\":"<<search_cost
+        <<",\"fair_transfers\":"<<transfers
+        <<",\"fair_retry_status\":\""<<retry_label<<"\""
         <<",\"fair_phase\":\""<<fair_label<<"\""
         <<",\"fill_optimal_proven\":"<<(fill_proven?"true":"false")
         <<",\"fair_optimal_proven_given_fill\":"<<(fair_proven?"true":"false")
@@ -456,14 +642,14 @@ std::string solve_payload(const std::string& payload){
       for(int p=0;p<staff;++p){
         if(index[s][p]<0)continue;
         if(SolutionBooleanValue(*selected,vars[s][index[s][p]])){
-          if(chosen>=0)throw std::runtime_error("double booked");
+          if(chosen>=0)throw StageFault{"multiple_assignments"};
           chosen=p;
           ++filled;
         }
       }
       result<<chosen;
     }
-    if(filled!=locked)throw std::runtime_error("Fairness changed protected fill");
+    if(filled!=locked)throw StageFault{"protected_fill_changed"};
     result<<"],\"filled\":"<<filled
           <<",\"missing\":"<<(count-filled);
     result<<",\"actual_counts\":[";
@@ -479,6 +665,13 @@ std::string solve_payload(const std::string& payload){
   }
   result<<'}';
   return result.str();
+  } catch(const StageFault& fault) {
+    return recovery_result(phase,fault.code,valid_baseline,baseline_staff,
+                           lines[4],pins,targets,door,year,month);
+  } catch(const std::exception&) {
+    return recovery_result(phase,"solver_exception",valid_baseline,baseline_staff,
+                           lines[4],pins,targets,door,year,month);
+  }
 }
 } // anonymous namespace
 

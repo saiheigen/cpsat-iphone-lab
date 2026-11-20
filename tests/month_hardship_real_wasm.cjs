@@ -162,7 +162,7 @@ function checkIncumbentGuards(call) {
   return result;
  }
  const full=run(dense,targets);
- if(full.filled!==360 || !full.fill_optimal_proven ||
+ if(full.baseline_valid!==true || full.filled!==360 || !full.fill_optimal_proven ||
     full.fill_search_status!=='NOT_RUN' || full.fill_used_baseline!==true ||
     full.final_abs_deviation>countScore(hints,targets).deviation)
   throw Error('Dense legal full incumbent was lost or searched again');
@@ -188,8 +188,23 @@ function checkIncumbentGuards(call) {
  conflict.pins.fill(-1);
  for(const i of [4,11]){conflict.pins[i]=-2;conflict.hints[i]=0;}
  const valid=run(conflict,[1]);
- if(valid.filled!==1 || valid.fill_search_status==='NOT_RUN' || valid.fill_used_baseline)
+ if(valid.baseline_valid!==false || valid.filled!==1 || valid.fill_search_status==='NOT_RUN' || valid.fill_used_baseline)
   throw Error('An infeasible full hint became a fill floor or fallback');
+ // No first-pass time, so only an unhinted retry can improve the two-slot roster.
+ const budgetCase=wire(open,[1,1]);
+ const retry=call(budgetCase+'limits_ms=0,0,2000,500\n');
+ check(open,[1,1],retry);
+ if(!retry.baseline_valid || retry.fair_warm_status!=='UNKNOWN' ||
+    retry.fair_retry_status!=='OPTIMAL' || retry.final_abs_deviation!==0)
+  throw Error('Fair retry did not improve a stalled warm solve');
+ const noRetry=call(budgetCase+'limits_ms=0,0,0,0\n');
+ check(open,[1,1],noRetry);
+ if(noRetry.fair_retry_status!=='NOT_RUN' || noRetry.final_abs_deviation!==2 ||
+    JSON.stringify(noRetry.assignments)!==JSON.stringify(open.hints))
+  throw Error('Zero retry budget changed the incumbent');
+ for(const suffix of ['limits_ms=1,1,1','limits_ms=1,-1,1,1','limits_ms=1,1,60001,1','extra']){
+  if(call(budgetCase+suffix+'\n').status!=='INVALID_INPUT')throw Error('Malformed budgets accepted');
+ }
  return {dense_full:full.filled,dense_partial:repaired.filled,
   pinned_vacancies_count_deviation:balanced.final_abs_deviation,
   conflicting_hint_legal_fill:valid.filled};

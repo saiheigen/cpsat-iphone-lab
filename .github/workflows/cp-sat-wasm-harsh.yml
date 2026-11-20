@@ -71,6 +71,12 @@ jobs:
             .build/dynamic/cp_sat_month_hardship_bridge.js \
             .build/dynamic/cp_sat_month_hardship_bridge.wasm \
             .build/dynamic/full_month_hardship_wasm_proof.json
+      - name: Measure fair retry on seven paired 28 percent synthetic matrices
+        run: |
+          node tests/month_fair_retry_benchmark.cjs \
+            .build/dynamic/cp_sat_month_hardship_bridge.js \
+            .build/dynamic/cp_sat_month_hardship_bridge.wasm \
+            .build/dynamic/matrix_seed_results.json
       - name: Publish genuine full-month three-phase hardship WASM only after real tests
         if: success()
         uses: actions/upload-artifact@v4
@@ -80,6 +86,9 @@ jobs:
             .build/dynamic/cp_sat_month_hardship_bridge.js
             .build/dynamic/cp_sat_month_hardship_bridge.wasm
             .build/dynamic/full_month_hardship_wasm_proof.json
+            .build/dynamic/matrix_seed_results.json
             .build/upstream_commit.txt
           include-hidden-files: true
           if-no-files-found: error
+      - name: Compare paired counts and L1 before accepting candidate
+        run: node tests/month_fair_retry_benchmark.cjs --check .build/dynamic/matrix_seed_results.json
