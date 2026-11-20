@@ -3,7 +3,7 @@
 name: Full-month three-stage hardship CP-SAT WASM experiment
 on:
   push:
-    branches: [main]
+    branches: [main, fix/v4-validated-incumbent]
     paths:
       - '.github/workflows/cp-sat-wasm-harsh.yml'
   workflow_dispatch:
