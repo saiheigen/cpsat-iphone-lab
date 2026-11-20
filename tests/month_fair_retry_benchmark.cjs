@@ -5,7 +5,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const crypto = require('node:crypto');
 const assert = require('node:assert/strict');
-const {wire, check} = require('./month_hardship_real_wasm.cjs');
+const {wire, check, hardshipScore} = require('./month_hardship_real_wasm.cjs');
 const {independentlyAudit} = require('./month_real_wasm.cjs');
 
 function fixture(seed) {
@@ -30,8 +30,49 @@ function fixture(seed) {
   return s;
 }
 
+function workload(assignments, staff) {
+  let triples=0, extra=0;
+  for(let d=0;d<assignments.length;d+=12){
+    const counts=Array(staff).fill(0);
+    for(const p of assignments.slice(d,d+12))if(p>=0)counts[p]++;
+    for(const n of counts){triples+=Number(n===3);extra+=Math.max(0,n-1);}
+  }
+  return {triples,extra};
+}
+
+function checkExtraRegression(engine){
+  // Only the first shift can move. Reassigning it balances counts but
+  // creates a second double-duty day. All unused positions are pinned empty.
+  const s={year:2026,month:11,pool:'door',staff:2,shiftCount:360,
+    pins:Array(360).fill(-1),hints:Array(360).fill(-1),allowed:'1'.repeat(720)};
+  for(const [slot,p] of [[5,0],[9,1],[53,0],[57,0]]){
+    s.hints[slot]=p;s.pins[slot]=p;
+  }
+  s.pins[5]=-2;
+  const result=JSON.parse(engine.ccall('solve_guard_month_harsh_v4','string',['string'],[wire(s,[2,2])]));
+  check(s,[2,2],result);
+  assert.ok(result.baseline_valid && !result.failed_stage);
+  assert.deepEqual(result.assignments,s.hints);
+  assert.equal(result.final_abs_deviation,2);
+  // Moving a daytime shift would improve L1 while worsening the normalized
+  // hardship score. Distinct dates ensure the daily guard cannot reject it.
+  s.pins.fill(-1);s.hints.fill(-1);
+  for(const [slot,p] of [[1,0],[53,0],[101,0],[149,1]]){
+    s.hints[slot]=p;s.pins[slot]=p;
+  }
+  s.pins[53]=-2;
+  const worse=s.hints.slice();worse[53]=1;
+  assert.ok(hardshipScore(s,worse)>hardshipScore(s,s.hints));
+  const guarded=JSON.parse(engine.ccall('solve_guard_month_harsh_v4','string',['string'],[wire(s,[2,2])]));
+  check(s,[2,2],guarded);
+  assert.ok(guarded.baseline_valid && !guarded.failed_stage);
+  assert.deepEqual(guarded.assignments,s.hints);
+
+}
+
 async function benchmark(js, wasm, out) {
   const factory=require(path.resolve(js)), binary=fs.readFileSync(wasm);
+  checkExtraRegression(await factory({wasmBinary:binary,print:()=>{},printErr:()=>{}}));
   const records=[];
   for(let seed=20261120;seed<=20261126;seed++){
     const s=fixture(seed), goals=Array(s.staff).fill(12), frame=wire(s,goals);
@@ -42,7 +83,11 @@ async function benchmark(js, wasm, out) {
     const audit=check(s,goals,r);
     assert.equal(audit.filled,s.shiftCount);
     assert.ok(!r.failed_stage, 'Exception fallback reached in benchmark');
-    const row={seed,input_sha256:crypto.createHash('sha256').update(frame).digest('hex'),
+    const before={...workload(s.hints,s.staff),hardship:hardshipScore(s,s.hints),filled:360,L1:96};
+    const after=workload(r.assignments,s.staff);
+    assert.ok(after.triples<=before.triples && after.extra<=before.extra);
+    assert.ok(audit.hardship<=before.hardship);
+    const row={before,...after,seed,input_sha256:crypto.createHash('sha256').update(frame).digest('hex'),
       filled:audit.filled, L1:audit.countDeviation, hardship:audit.hardship,
       warm_status:r.fair_warm_status, warm_L1:r.fair_warm_cost,
       retry_status:r.fair_retry_status, search_L1:r.fair_search_cost, transfers:r.fair_transfers, ms};

@@ -1,3 +1,4 @@
+#include <tuple>
 // EXPERIMENTAL full-calendar THREE-stage CP-SAT WASM with protected hardship.
 // Stage 1 protects validated input fill and skips search at the fill upper
 // bound. Stage 2 locks achieved fill and minimizes
@@ -148,6 +149,36 @@ bool audit_assignment(const std::vector<int>& a, const std::string& allowed,
     jobs[p].push_back(s);
   }
   return true;
+}
+
+struct GuardScores {
+  int extra=0, triples=0;
+  long long hardship=0;
+  bool permits(const GuardScores& next) const {
+    return next.extra<=extra && next.triples<=triples && next.hardship<=hardship;
+  }
+};
+
+GuardScores roster_scores(const std::vector<int>& roster,int staff,bool door){
+  const int slots=door?12:7, cats=hardship_categories(door);
+  std::vector<int> counts(staff),daily(staff),totals(cats),load(staff*cats);
+  int filled=0;
+  GuardScores score;
+  for(size_t s=0;s<roster.size();++s){
+    if(s%slots==0)std::fill(daily.begin(),daily.end(),0);
+    int p=roster[s];
+    if(p<0)continue;
+    ++filled; ++counts[p]; ++daily[p];
+    score.extra+=daily[p]>1;
+    score.triples+=daily[p]==3;
+    for(int c=0;c<cats;++c){
+      int units=hardship_units(door,s%slots,c);
+      totals[c]+=units; load[p*cats+c]+=units;
+    }
+  }
+  for(int p=0;p<staff;++p)for(int c=0;c<cats;++c)
+    score.hardship+=hardship_weight(door,c)*std::llabs(1LL*filled*load[p*cats+c]-1LL*totals[c]*counts[p]);
+  return score;
 }
 
 std::string json_array(const std::vector<int>& a) {
@@ -404,6 +435,38 @@ std::string solve_payload(const std::string& payload){
   phase="fair";
   model.AddEquality(objective,locked);
   replace_hint(model,first,base_vars);
+  // Compare like-for-like coverage. After gaining fill, protect that new incumbent.
+  auto roster_of=[&](const CpSolverResponse& response){
+    std::vector<int> roster(count,-1);
+    for(int s=0;s<count;++s)for(int p=0;p<staff;++p)
+      if(index[s][p]>=0 && SolutionBooleanValue(response,vars[s][index[s][p]]))roster[s]=p;
+    return roster;
+  };
+  const auto start_roster=roster_of(first);
+  const auto floor=roster_scores(start_roster,staff,door);
+  const bool protect=valid_baseline;
+  std::vector<std::tuple<int,int,BoolVar>> triple_flags;
+  if(protect && door){
+    LinearExpr active_days, triples;
+    for(int p=0;p<staff;++p)for(int d=0;d<days;++d){
+      active_days+=model.GetBoolVarFromProtoIndex(active_index[p][d]);
+      LinearExpr daily;
+      int options=0, initial=0;
+      for(int s=d*slots;s<(d+1)*slots;++s){
+        if(index[s][p]<0)continue;
+        daily+=vars[s][index[s][p]]; ++options; initial+=start_roster[s]==p;
+      }
+      if(options<3)continue;
+      if(floor.triples==0){model.AddLessOrEqual(daily,2);continue;}
+      auto flag=model.NewBoolVar();
+      model.AddLessOrEqual(daily,2+flag);
+      model.AddGreaterOrEqual(daily,3*flag);
+      model.AddHint(flag,initial==3);
+      triples+=flag; triple_flags.emplace_back(p,d,flag);
+    }
+    model.AddGreaterOrEqual(active_days,locked-floor.extra);
+    model.AddLessOrEqual(triples,floor.triples);
+  }
   LinearExpr fairness;
   std::vector<IntVar> count_deviations;
   for(int p=0;p<staff;++p){
@@ -430,6 +493,11 @@ std::string solve_payload(const std::string& payload){
       throw StageFault{"invalid_fair_model"};
     if(response.status()==CpSolverStatus::INFEASIBLE)
       throw StageFault{"incumbent_excluded"};
+    if(protect && has_solution(response.status()) &&
+       !floor.permits(roster_scores(roster_of(response),staff,door))){
+      // Discard the candidate as well as its optimality claim for this guarded search.
+      return CpSolverResponse{};
+    }
     return response;
   };
   auto cost_of=[&](const CpSolverResponse& r){
@@ -485,6 +553,12 @@ std::string solve_payload(const std::string& payload){
       for(int p=0;p<staff;++p){
         const int need=targets[p]-counts[p];
         if(need>deficit && index[s][p]>=0 && can_take(s,jobs[p],slots,door,year,month)){
+          if(protect){
+            assignment[s]=p;
+            const bool ok=floor.permits(roster_scores(assignment,staff,door));
+            assignment[s]=from;
+            if(!ok)continue;
+          }
           best=p; deficit=need;
         }
       }
@@ -506,6 +580,8 @@ std::string solve_payload(const std::string& payload){
         if(weekday(year,month,day+1)==0 && (door?(k>=4 && k<=10):k==6))
           balanced.set_solution(stay_index[p][day],1);
       }
+      for(const auto& [p,d,flag]:triple_flags)
+        balanced.set_solution(flag.index(),std::count(assignment.begin()+d*slots,assignment.begin()+(d+1)*slots,p)==3);
       for(int p=0;p<staff;++p)
         balanced.set_solution(count_deviations[p].index(),std::abs(counts[p]-targets[p]));
       if(!SolutionIsFeasible(model.Build(),{balanced.solution().data(),
@@ -526,6 +602,9 @@ std::string solve_payload(const std::string& payload){
     model.AddHint(deviation,selected!=&first?selected->solution(deviation.index()):
                   std::abs(first_counts[p]-targets[p]));
   }
+  const auto stage2_roster=roster_of(*selected);
+  for(const auto& [p,d,flag]:triple_flags)
+    model.AddHint(flag,std::count(stage2_roster.begin()+d*slots,stage2_roster.begin()+(d+1)*slots,p)==3);
   std::vector<int> occupied(count,0);
   for(int s=0;s<count;++s){
     LinearExpr one;
@@ -609,6 +688,8 @@ std::string solve_payload(const std::string& payload){
   phase="return";
   if(selected==&baseline && !audit_assignment(baseline_staff,lines[4],pins,staff,door,year,month))
     throw StageFault{"baseline_audit_failed"};
+  if(protect && !floor.permits(roster_scores(roster_of(*selected),staff,door)))
+    throw StageFault{"violated_roster_quality_floor"};
   const bool fill_proven=status==CpSolverStatus::OPTIMAL || locked==upper;
   const bool fair_proven=fair_status==CpSolverStatus::OPTIMAL && second_cost==chosen_cost;
   const char* overall=fill_proven && fair_proven && harsh_proven?"OPTIMAL":"FEASIBLE";

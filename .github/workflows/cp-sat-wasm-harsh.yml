@@ -71,7 +71,7 @@ jobs:
             .build/dynamic/cp_sat_month_hardship_bridge.js \
             .build/dynamic/cp_sat_month_hardship_bridge.wasm \
             .build/dynamic/full_month_hardship_wasm_proof.json
-      - name: Measure fair retry on seven paired 28 percent synthetic matrices
+      - name: Check workload and hardship guards on seven paired 28 percent matrices
         run: |
           node tests/month_fair_retry_benchmark.cjs \
             .build/dynamic/cp_sat_month_hardship_bridge.js \
