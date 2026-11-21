@@ -119,26 +119,44 @@ void replace_hint(CpModelBuilder& model, const CpSolverResponse& solution,
     model.AddHint(model.GetIntVarFromProtoIndex(i), solution.solution(i));
 }
 
-bool can_take(int s,const std::vector<int>& jobs,int slots,bool door,int year,int month) {
+// Bits, from low to high: two days before, one day before, one day after,
+ // and two days after the roster. Negative mask selects the legacy contract.
+bool edge_work(int mask, int d, int days) {
+  if(d==-2)return mask&1;
+  if(d==-1)return mask&2;
+  if(d==days)return mask&4;
+  if(d==days+1)return mask&8;
+  return false;
+}
+bool can_take(int s,const std::vector<int>& jobs,int slots,bool door,int year,int month,int mask) {
   const int d=s/slots, k=s%slots;
   auto stay=[&](int slot){return door ? slot>=4 && slot<=10 : slot==6;};
   int same_day=1;
+  const int days=days_in_month(year,month);
+  bool near[5]={};
+  if(mask>=0)for(int off=-2;off<=2;++off)near[off+2]=edge_work(mask,d+off,days);
   for(int prior:jobs){
     const int days_apart=std::abs(d-prior/slots), j=prior%slots;
-    if(days_apart==1 || (days_apart==2 && j==k))return false;
+    if(days_apart==1 && mask<0)return false;
+    if(days_apart<=2 && j==k)return false;
+    if(mask>=0 && days_apart<=2)near[2+prior/slots-d]=true;
+    if(mask>=0 && days_apart==1){
+      const int gap=prior/slots<d ? 24+kStartDoor[k]-kEndDoor[j] : 24+kStartDoor[j]-kEndDoor[k];
+      if(gap<6)return false;
+    }
     if(days_apart==7 && weekday(year,month,d+1)==0 && stay(k) && stay(j))return false;
     if(days_apart!=0)continue;
     if(!door || ++same_day>3)return false;
     if(kEndDoor[j]+6>kStartDoor[k] && kEndDoor[k]+6>kStartDoor[j])return false;
   }
-  return true;
+  return mask<0 || !((near[0]&&near[1]) || (near[1]&&near[3]) || (near[3]&&near[4]));
 }
 
 // Audit the actual assignment against the wire, independently of the CP model,
 // before returning the input roster after a search timeout or an exception.
 bool audit_assignment(const std::vector<int>& a, const std::string& allowed,
                       const std::vector<int>& pins, int staff, bool door,
-                      int year, int month) {
+                      int year, int month, const std::vector<int>& edges) {
   const int slots=door?12:7;
   std::vector<std::vector<int>> jobs(staff);
   for(int s=0;s<static_cast<int>(a.size());++s){
@@ -146,7 +164,7 @@ bool audit_assignment(const std::vector<int>& a, const std::string& allowed,
     if(p < -1 || p >= staff || (pins[s]!=-2 && pins[s]!=p))return false;
     if(p==-1)continue;
     if(allowed[s*staff+p]!='1')return false;
-    if(!can_take(s,jobs[p],slots,door,year,month))return false;
+    if(!can_take(s,jobs[p],slots,door,year,month,edges[p]))return false;
     jobs[p].push_back(s);
   }
   return true;
@@ -198,12 +216,12 @@ bool has_solution(CpSolverStatus status) {
 std::string recovery_result(const char* phase, const char* reason,
                             bool valid, const std::vector<int>& a,
                             const std::string& allowed, const std::vector<int>& pins,
-                            const std::vector<int>& targets, bool door, int year, int month) {
+                            const std::vector<int>& targets, bool door, int year, int month, const std::vector<int>& edges) {
   const int staff=static_cast<int>(targets.size()), slots=door?12:7, cats=hardship_categories(door);
   std::ostringstream out;
   out<<"{\"failed_stage\":\""<<phase<<"\",\"failure_reason\":\""<<reason
      <<"\",\"baseline_valid\":"<<(valid?"true":"false");
-  if(!valid || !audit_assignment(a,allowed,pins,staff,door,year,month)){
+  if(!valid || !audit_assignment(a,allowed,pins,staff,door,year,month,edges)){
     out<<",\"status\":\"SOLVER_ERROR\",\"fallback_audited\":false}";
     return out.str();
   }
@@ -244,7 +262,13 @@ std::string solve_payload(const std::string& payload){
   std::array<std::string,8> lines;
   for(auto& line:lines)if(!std::getline(stream,line))return kInvalid;
   std::string extra;
-  // Optional ninth line: limits_ms=fill,fair,fair_retry,hardship.
+  const bool relaxed=lines[0]=="guard-month-harsh-v5" && lines[2]=="door";
+  std::vector<int> edges;
+  if(relaxed){
+    if(!std::getline(stream,extra) || extra.rfind("edges=",0)!=0)return kInvalid;
+    edges=integers(extra.substr(6));
+  }
+  // Optional final line: limits_ms=fill,fair,fair_retry,hardship.
   std::vector<int> limits(4,10000);
   if(std::getline(stream,extra)){
     if(extra.rfind("limits_ms=",0)!=0)return kInvalid;
@@ -252,7 +276,7 @@ std::string solve_payload(const std::string& payload){
     if(limits.size()!=4 || std::any_of(limits.begin(),limits.end(),
        [](int ms){return ms<0 || ms>60000;}) || std::getline(stream,extra))return kInvalid;
   }
-  if(lines[0]!="guard-month-harsh-v4"||lines[1].size()!=7||
+  if((!relaxed && lines[0]!="guard-month-harsh-v4")||lines[1].size()!=7||
      lines[1][4]!='-')return kInvalid;
   const int year=number(lines[1].substr(0,4));
   const int month=number(lines[1].substr(5,2));
@@ -269,6 +293,8 @@ std::string solve_payload(const std::string& payload){
      lines[4].size()!=static_cast<size_t>(count*staff))
     return kInvalid;
   for(char c:lines[4])if(c!='0'&&c!='1')return kInvalid;
+  if(!relaxed)edges.assign(staff,-1);
+  else if(static_cast<int>(edges.size())!=staff || std::any_of(edges.begin(),edges.end(),[](int m){return m<0 || m>15;}))return kInvalid;
   const auto pins=integers(lines[5]);
   const auto hints=integers(lines[6]);
   if(pins.size()!=static_cast<size_t>(count)||
@@ -348,7 +374,18 @@ std::string solve_payload(const std::string& payload){
       stay_index[p][d]=stay.index();
       if(baseline_stay)baseline_true_vars.push_back(stay.index());
 
-      if(d>=1)model.AddLessOrEqual(active[d-1]+active[d],1);
+      if(!relaxed && d>=1)model.AddLessOrEqual(active[d-1]+active[d],1);
+      if(relaxed){
+        // Close all three-day windows ending today, plus the two at month end.
+        for(int end=d;end<=(d==days-1 ? days+1 : d);++end){
+          LinearExpr window;
+          for(int day=end-2;day<=end;++day){
+            if(day<0 || day>=days)window+=int(edge_work(edges[p],day,days));
+            else window+=active[day];
+          }
+          model.AddLessOrEqual(window,2);
+        }
+      }
       if(d>=7&&weekday(year,month,d+1)==0)
         model.AddLessOrEqual(standby[d-7]+standby[d],1);
 
@@ -356,6 +393,11 @@ std::string solve_payload(const std::string& payload){
         const int a=d*slots+k;
         if(index[a][p]<0)continue;
         const BoolVar va=vars[a][index[a][p]];
+        if(relaxed && d+1<days)for(int j=0;j<slots;++j){
+          if(j!=k && 24+kStartDoor[j]-kEndDoor[k]>=6)continue;
+          const int b=(d+1)*slots+j;
+          if(index[b][p]>=0)model.AddLessOrEqual(va+vars[b][index[b][p]],1);
+        }
         if(d+2<days){
           const int b=(d+2)*slots+k;
           if(index[b][p]>=0)
@@ -563,7 +605,7 @@ std::string solve_payload(const std::string& payload){
       int best=-1, deficit=0;
       for(int p=0;p<staff;++p){
         const int need=targets[p]-counts[p];
-        if(need>deficit && index[s][p]>=0 && can_take(s,jobs[p],slots,door,year,month)){
+        if(need>deficit && index[s][p]>=0 && can_take(s,jobs[p],slots,door,year,month,edges[p])){
           if(protect){
             assignment[s]=p;
             const bool ok=floor.permits(roster_scores(assignment,staff,door));
@@ -598,7 +640,7 @@ std::string solve_payload(const std::string& payload){
       if(!SolutionIsFeasible(model.Build(),{balanced.solution().data(),
              static_cast<size_t>(balanced.solution_size())}) ||
          SolutionIntegerValue(balanced,fairness)!=chosen_cost ||
-         !audit_assignment(assignment,lines[4],pins,staff,door,year,month))
+         !audit_assignment(assignment,lines[4],pins,staff,door,year,month,edges))
         throw StageFault{"transfer_failed_audit"};
       selected=&balanced;
     }
@@ -699,7 +741,7 @@ std::string solve_payload(const std::string& payload){
   const bool harsh_proven=harsh_status==CpSolverStatus::OPTIMAL;
 
   enter_phase("return");
-  if(selected==&baseline && !audit_assignment(baseline_staff,lines[4],pins,staff,door,year,month))
+  if(selected==&baseline && !audit_assignment(baseline_staff,lines[4],pins,staff,door,year,month,edges))
     throw StageFault{"baseline_audit_failed"};
   if(protect && !floor.permits(roster_scores(roster_of(*selected),staff,door)))
     throw StageFault{"violated_roster_quality_floor"};
@@ -761,10 +803,10 @@ std::string solve_payload(const std::string& payload){
   return result.str();
   } catch(const StageFault& fault) {
     return recovery_result(phase,fault.code,valid_baseline,baseline_staff,
-                           lines[4],pins,targets,door,year,month);
+                           lines[4],pins,targets,door,year,month,edges);
   } catch(const std::exception&) {
     return recovery_result(phase,"solver_exception",valid_baseline,baseline_staff,
-                           lines[4],pins,targets,door,year,month);
+                           lines[4],pins,targets,door,year,month,edges);
   }
 }
 } // anonymous namespace
@@ -779,3 +821,4 @@ extern "C" KEEP const char* solve_guard_month_harsh_v4(const char* payload){
     return output.c_str();
   }
 }
+
