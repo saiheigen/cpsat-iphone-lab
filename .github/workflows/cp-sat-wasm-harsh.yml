@@ -3,7 +3,7 @@
 name: Full-month three-stage hardship CP-SAT WASM experiment
 on:
   push:
-    branches: [main, fix/v4-validated-incumbent]
+    branches: [main, fix/v4-validated-incumbent, test/door30-abort]
     paths:
       - '.github/workflows/cp-sat-wasm-harsh.yml'
   workflow_dispatch:
@@ -34,7 +34,10 @@ jobs:
       - name: Clone stable OR-Tools source for dynamic library
         run: |
           mkdir -p .build
-          git clone --depth 1 --branch stable https://github.com/google/or-tools.git .build/or-tools
+          git init .build/or-tools
+          git -C .build/or-tools fetch --depth=1 https://github.com/google/or-tools.git 100f66e6242ab8bf8d32feb8f3bf086db66ae2b5
+          git -C .build/or-tools checkout --detach FETCH_HEAD
+          git -C .build/or-tools apply "$GITHUB_WORKSPACE/build/ortools-hint-load-timeout.patch"
           git -C .build/or-tools rev-parse HEAD | tee .build/upstream_commit.txt
       - name: Apply reviewed Ninja protoc dependency repair
         run: |
@@ -82,7 +85,7 @@ jobs:
           node tests/door-abort-stress.cjs \
             .build/dynamic/cp_sat_month_hardship_bridge.js \
             .build/dynamic/cp_sat_month_hardship_bridge.wasm \
-            tests/fixtures/synthetic-door30-seed20261120.txt
+            tests/fixtures/page-door30-november.txt
       - name: Publish genuine full-month three-phase hardship WASM only after real tests
         if: success()
         uses: actions/upload-artifact@v4
