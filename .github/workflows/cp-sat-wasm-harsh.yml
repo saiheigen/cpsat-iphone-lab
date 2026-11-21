@@ -77,6 +77,12 @@ jobs:
             .build/dynamic/cp_sat_month_hardship_bridge.js \
             .build/dynamic/cp_sat_month_hardship_bridge.wasm \
             .build/dynamic/matrix_seed_results.json
+      - name: Replay synthetic 30-person door frame ten times
+        run: |
+          node tests/door-abort-stress.cjs \
+            .build/dynamic/cp_sat_month_hardship_bridge.js \
+            .build/dynamic/cp_sat_month_hardship_bridge.wasm \
+            tests/fixtures/synthetic-door30-seed20261120.txt
       - name: Publish genuine full-month three-phase hardship WASM only after real tests
         if: success()
         uses: actions/upload-artifact@v4
