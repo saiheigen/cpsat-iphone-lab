@@ -1,0 +1,11 @@
+--- a/ortools/sat/cp_model_solver_helpers.cc
++++ b/ortools/sat/cp_model_solver_helpers.cc
+@@ -2052,6 +2052,8 @@
+ 
+   // Solve optimization problem.
+   LoadCpModel(updated_model_proto, &local_model);
++  // Loading may stop before search strategies have been constructed.
++  if (local_model.GetOrCreate<TimeLimit>()->LimitReached()) return;
+ 
+   if (local_model.GetOrCreate<SatSolver>()->ModelIsUnsat()) {
+     // TODO(user): This should mean the full model is also unsat.

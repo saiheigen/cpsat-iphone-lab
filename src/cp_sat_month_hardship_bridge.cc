@@ -14,6 +14,7 @@
 // Single-threaded, bounded model with strict validation and time limit.
 #include <algorithm>
 #include <array>
+#include <cstdio>
 #include <cstdlib>
 #include <exception>
 #include <numeric>
@@ -386,7 +387,13 @@ std::string solve_payload(const std::string& payload){
       SolutionIsFeasible(model.Build(),
           {baseline.solution().data(),static_cast<size_t>(base_vars)});
   const bool skip_fill=valid_baseline && baseline_fill==upper;
-  const char* phase="fill";
+  const char* phase=nullptr;
+  auto enter_phase=[&](const char* name){
+    phase=name;
+    std::fprintf(stderr,"solver_phase=%s\n",name);
+    std::fflush(stderr);
+  };
+  enter_phase("fill");
   try {
   if(valid_baseline)model.AddGreaterOrEqual(objective,baseline_fill);
   if(std::any_of(hints.begin(),hints.end(),[](int p){return p>=0;}))
@@ -416,6 +423,8 @@ std::string solve_payload(const std::string& payload){
           <<",\"fair_optimal_proven_given_fill\":false,\"hardship_phase\":\"NOT_RUN\"}";
     return result.str();
   }
+  if(has_solution(fill_search.status()) && fill_search.solution_size()!=base_vars)
+    throw StageFault{"incomplete_solver_solution"};
   const auto searched_fill=found_fill?SolutionIntegerValue(fill_search,objective):-1;
   if(valid_baseline && found_fill && searched_fill<baseline_fill)
     throw StageFault{"violated_fill_floor"};
@@ -432,7 +441,7 @@ std::string solve_payload(const std::string& payload){
   }
   int first_cost=0;
   for(int p=0;p<staff;++p)first_cost+=std::abs(first_counts[p]-targets[p]);
-  phase="fair";
+  enter_phase("fair");
   model.AddEquality(objective,locked);
   replace_hint(model,first,base_vars);
   // Compare like-for-like coverage. After gaining fill, protect that new incumbent.
@@ -493,6 +502,8 @@ std::string solve_payload(const std::string& payload){
       throw StageFault{"invalid_fair_model"};
     if(response.status()==CpSolverStatus::INFEASIBLE)
       throw StageFault{"incumbent_excluded"};
+    if(has_solution(response.status()) && response.solution_size()!=model.Build().variables_size())
+      throw StageFault{"incomplete_solver_solution"};
     if(protect && has_solution(response.status()) &&
        !floor.permits(roster_scores(roster_of(response),staff,door))){
       // Discard the candidate as well as its optimality claim for this guarded search.
@@ -515,7 +526,7 @@ std::string solve_payload(const std::string& payload){
   const int lower=std::abs(locked-std::accumulate(targets.begin(),targets.end(),0));
   if(limits[2]>0 && warm_status!=CpSolverStatus::OPTIMAL &&
      warm_cost==first_cost && warm_cost>lower){
-    phase="fair_retry";
+    enter_phase("fair_retry");
     model.ClearHints();
     auto retry=solve_fair(limits[2],false);
     retry_label=CpSolverStatus_Name(retry.status());
@@ -539,7 +550,7 @@ std::string solve_payload(const std::string& payload){
   // assignment directly from a surplus to a deficit. Each move lowers L1 by
   // two, leaves fill positions intact, and only adds duties to the receiver.
   if(limits[2]>0 && chosen_cost>lower && fair_status!=CpSolverStatus::OPTIMAL){
-    phase="balance";
+    enter_phase("balance");
     std::vector<int> assignment(count,-1), counts(staff);
     std::vector<std::vector<int>> jobs(staff);
     for(int s=0;s<count;++s)for(int p=0;p<staff;++p){
@@ -592,7 +603,7 @@ std::string solve_payload(const std::string& payload){
       selected=&balanced;
     }
   }
-  phase="hardship";
+  enter_phase("hardship");
   // No stage-3 optimization can create a new missing shift, sacrifice a
   // previously covered shift, or worsen the achieved second-stage L1 cost.
   model.AddEquality(fairness,chosen_cost);
@@ -670,6 +681,8 @@ std::string solve_payload(const std::string& payload){
     throw StageFault{"invalid_hardship_model_or_inconsistent_floor"};
   const bool harsh_found=harsh_status==CpSolverStatus::OPTIMAL ||
                          harsh_status==CpSolverStatus::FEASIBLE;
+  if(has_solution(third.status()) && third.solution_size()!=model.Build().variables_size())
+    throw StageFault{"incomplete_solver_solution"};
   const char* harsh_label=harsh_status==CpSolverStatus::OPTIMAL?"OPTIMAL":
                           harsh_status==CpSolverStatus::FEASIBLE?"FEASIBLE":
                           harsh_status==CpSolverStatus::INFEASIBLE?"INFEASIBLE":"UNKNOWN";
@@ -685,7 +698,7 @@ std::string solve_payload(const std::string& payload){
   }
   const bool harsh_proven=harsh_status==CpSolverStatus::OPTIMAL;
 
-  phase="return";
+  enter_phase("return");
   if(selected==&baseline && !audit_assignment(baseline_staff,lines[4],pins,staff,door,year,month))
     throw StageFault{"baseline_audit_failed"};
   if(protect && !floor.permits(roster_scores(roster_of(*selected),staff,door)))
