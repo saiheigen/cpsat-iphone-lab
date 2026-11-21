@@ -3,7 +3,7 @@
 name: Full-month three-stage hardship CP-SAT WASM experiment
 on:
   push:
-    branches: [main, fix/v4-validated-incumbent, test/door30-abort]
+    branches: [main, fix/v4-validated-incumbent, test/door30-abort, feat/door-two-duty-days]
     paths:
       - '.github/workflows/cp-sat-wasm-harsh.yml'
   workflow_dispatch:
@@ -68,6 +68,8 @@ jobs:
           cmake --build .build/dynamic --target cp_sat_month_hardship_bridge --parallel 4
           test -s .build/dynamic/cp_sat_month_hardship_bridge.js
           test -s .build/dynamic/cp_sat_month_hardship_bridge.wasm
+      - name: Test consecutive door days and calendar boundaries
+        run: node tests/door-run-length.cjs .build/dynamic/cp_sat_month_hardship_bridge.js .build/dynamic/cp_sat_month_hardship_bridge.wasm
       - name: Actually execute 3-phase full-month hardship WASM and independent audits
         run: |
           node tests/month_hardship_real_wasm.cjs \
